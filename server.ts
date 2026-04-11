@@ -1,3 +1,4 @@
+import './src/server/env';
 import express from "express";
 import { createServer as createViteServer } from "vite";
 import path from "path";
@@ -26,7 +27,8 @@ async function startServer() {
       status: "ok", 
       service: "casa-control-plane-node",
       config: {
-        geminiConfigured: !!process.env.GEMINI_API_KEY?.trim()
+        geminiConfigured: !!process.env.GEMINI_API_KEY?.trim(),
+        geminiPrefix: process.env.GEMINI_API_KEY ? process.env.GEMINI_API_KEY.substring(0, 4) : null
       }
     });
   });

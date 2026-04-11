@@ -7,7 +7,7 @@ import {
 } from '../schemas/contracts';
 import { z } from 'zod';
 
-const PYTHON_API_URL = process.env.PYTHON_API_URL || 'http://localhost:8000';
+const BACKEND_API_URL = process.env.PYTHON_API_URL || process.env.BACKEND_API_URL || 'https://dburt-proex-python-fastapi-backend.onrender.com';
 
 async function fetchWithTimeout(url: string, options: RequestInit = {}, timeoutMs = 10000) {
   const controller = new AbortController();
@@ -18,12 +18,12 @@ async function fetchWithTimeout(url: string, options: RequestInit = {}, timeoutM
       signal: controller.signal
     });
     if (!response.ok) {
-      throw new Error(`Python Bridge Error: ${response.status} ${response.statusText}`);
+      throw new Error(`Backend Bridge Error: ${response.status} ${response.statusText}`);
     }
     return await response.json();
   } catch (error: any) {
     if (error.name === 'AbortError') {
-      throw new Error(`Python Bridge Timeout: Request to ${url} exceeded ${timeoutMs}ms`);
+      throw new Error(`Backend Bridge Timeout: Request to ${url} exceeded ${timeoutMs}ms`);
     }
     throw error;
   } finally {
@@ -31,16 +31,16 @@ async function fetchWithTimeout(url: string, options: RequestInit = {}, timeoutM
   }
 }
 
-export const pythonBridge = {
+export const backendBridge = {
   async getDashboard(requestId?: string): Promise<z.infer<typeof DashboardSchema>> {
     const headers = requestId ? { 'X-Request-ID': requestId } : {};
-    const data = await fetchWithTimeout(`${PYTHON_API_URL}/api/v1/dashboard`, { headers });
+    const data = await fetchWithTimeout(`${BACKEND_API_URL}/api/v1/dashboard`, { headers });
     return DashboardSchema.parse(data);
   },
 
   async getBoundaryStress(requestId?: string): Promise<z.infer<typeof BoundaryStressSchema>> {
     const headers = requestId ? { 'X-Request-ID': requestId } : {};
-    const data = await fetchWithTimeout(`${PYTHON_API_URL}/api/v1/boundary-stress`, { headers });
+    const data = await fetchWithTimeout(`${BACKEND_API_URL}/api/v1/boundary-stress`, { headers });
     return BoundaryStressSchema.parse(data);
   },
 
@@ -50,7 +50,7 @@ export const pythonBridge = {
       'Content-Type': 'application/json',
       ...(requestId ? { 'X-Request-ID': requestId } : {})
     };
-    const data = await fetchWithTimeout(`${PYTHON_API_URL}/api/v1/policy/dryrun`, {
+    const data = await fetchWithTimeout(`${BACKEND_API_URL}/api/v1/policy/dryrun`, {
       method: 'POST',
       headers,
       body: JSON.stringify(payload)
@@ -60,7 +60,7 @@ export const pythonBridge = {
 
   async replayDecision(decisionId: string, requestId?: string): Promise<z.infer<typeof DecisionReplaySchema>> {
     const headers = requestId ? { 'X-Request-ID': requestId } : {};
-    const data = await fetchWithTimeout(`${PYTHON_API_URL}/api/v1/decision-replay/${decisionId}`, { headers });
+    const data = await fetchWithTimeout(`${BACKEND_API_URL}/api/v1/decision-replay/${decisionId}`, { headers });
     return DecisionReplaySchema.parse(data);
   },
 
@@ -69,7 +69,7 @@ export const pythonBridge = {
       'Content-Type': 'application/json',
       ...(requestId ? { 'X-Request-ID': requestId } : {})
     };
-    const data = await fetchWithTimeout(`${PYTHON_API_URL}/api/v1/admin/policy/apply`, {
+    const data = await fetchWithTimeout(`${BACKEND_API_URL}/api/v1/admin/policy/apply`, {
       method: 'POST',
       headers,
       body: JSON.stringify({ policyId, reason })

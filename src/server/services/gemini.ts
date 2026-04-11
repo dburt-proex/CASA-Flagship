@@ -1,5 +1,5 @@
 import { GoogleGenAI, Type, Content } from '@google/genai';
-import { pythonBridge } from './pythonBridge';
+import { backendBridge } from './backendBridge';
 import Redis from 'ioredis';
 
 // ============================================================================
@@ -8,14 +8,12 @@ import Redis from 'ioredis';
 const rawApiKey = process.env.GEMINI_API_KEY?.trim();
 
 if (!rawApiKey) {
-  console.error('[CRITICAL] GEMINI_API_KEY is missing or blank. The server cannot start.');
-  process.exit(1);
+  console.warn('[WARNING] GEMINI_API_KEY is missing or blank. Chat features will not work until configured.');
+} else {
+  console.log(`[STARTUP] Gemini API Key configured. Prefix: ${rawApiKey.substring(0, 4)}...`);
 }
 
-// Log safe diagnostics
-console.log(`[STARTUP] Gemini API Key configured. Prefix: ${rawApiKey.substring(0, 4)}...`);
-
-const ai = new GoogleGenAI({ apiKey: rawApiKey });
+const ai = new GoogleGenAI({ apiKey: rawApiKey || 'UNCONFIGURED_KEY' });
 
 // Redis Session Storage
 const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
@@ -96,17 +94,17 @@ async function executeTool(call: any, requestId?: string) {
   try {
     switch (name) {
       case 'fetchDashboard':
-        return await pythonBridge.getDashboard(requestId);
+        return await backendBridge.getDashboard(requestId);
       case 'fetchBoundaryStress':
-        return await pythonBridge.getBoundaryStress(requestId);
+        return await backendBridge.getBoundaryStress(requestId);
       case 'runPolicyDryRun':
-        return await pythonBridge.runDryRun({ 
+        return await backendBridge.runDryRun({ 
           policyId: args.policyId, 
           parameters: {}, 
           environment: args.environment || 'staging' 
         }, requestId);
       case 'replayDecision':
-        return await pythonBridge.replayDecision(args.decisionId, requestId);
+        return await backendBridge.replayDecision(args.decisionId, requestId);
       default:
         throw new Error(`Unknown tool: ${name}`);
     }

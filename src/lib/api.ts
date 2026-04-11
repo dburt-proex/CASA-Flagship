@@ -1,8 +1,16 @@
 export const api = {
   async post<T>(endpoint: string, payload: any): Promise<T> {
+    const token = localStorage.getItem('casa_token');
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
     const res = await fetch(`/api${endpoint}`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify(payload),
     });
     
@@ -15,7 +23,15 @@ export const api = {
   },
 
   async get<T>(endpoint: string): Promise<T> {
-    const res = await fetch(`/api${endpoint}`);
+    const token = localStorage.getItem('casa_token');
+    const headers: Record<string, string> = {};
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    const res = await fetch(`/api${endpoint}`, {
+      headers
+    });
     
     if (!res.ok) {
       const errorData = await res.json().catch(() => ({}));
