@@ -42,27 +42,6 @@ Live backend URL:
 PYTHON_API_URL=https://dburt-proex-python-fastapi-backend.onrender.com
 Current Backend Contract
 
-
-
-### mermaid 
-'flowchart LR
-  U[Operator / Browser] --> F[CASA-Flagship Frontend]
-  F --> N[CASA-Flagship Node Server]
-  N --> B[python-fastapi-backend]
-  B --> R[(Future Redis)]
-  N --> A[(Future Auth / RBAC)]
-  N --> L[(Future Audit Logging)]
-
-  subgraph Repo 1
-    F
-    N
-  end
-
-  subgraph Repo 2
-    B
-  end'''
-
-
 CASA-Flagship expects the backend to support these routes:
 
 GET /api/v1/dashboard

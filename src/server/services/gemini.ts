@@ -16,17 +16,51 @@ if (!rawApiKey) {
 const ai = new GoogleGenAI({ apiKey: rawApiKey || 'UNCONFIGURED_KEY' });
 
 // Redis Session Storage
-const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
-const redis = new Redis(redisUrl);
+const redisUrl = process.env.REDIS_URL;
+const isLocalRedis = !redisUrl || redisUrl.includes('localhost') || redisUrl.includes('127.0.0.1');
+
+let redis: Redis | null = null;
+if (!isLocalRedis) {
+  redis = new Redis(redisUrl, {
+    maxRetriesPerRequest: 1,
+    retryStrategy: () => null // Do not retry if connection fails
+  });
+  redis.on('error', (err) => {
+    console.warn('[Redis] Connection error:', err.message);
+  });
+} else {
+  console.log('[STARTUP] Using in-memory session storage (Redis not configured or local)');
+}
+
+const memoryStore = new Map<string, string>();
 const SESSION_TTL_SEC = 60 * 60; // 1 hour
 
 async function getChatHistory(sessionId: string): Promise<Content[]> {
-  const data = await redis.get(`chat:${sessionId}`);
+  try {
+    if (redis) {
+      const data = await redis.get(`chat:${sessionId}`);
+      return data ? JSON.parse(data) : [];
+    }
+  } catch (err) {
+    console.warn('[Redis] Failed to get chat history, falling back to memory');
+  }
+  
+  const data = memoryStore.get(`chat:${sessionId}`);
   return data ? JSON.parse(data) : [];
 }
 
 async function saveChatHistory(sessionId: string, history: Content[]) {
-  await redis.setex(`chat:${sessionId}`, SESSION_TTL_SEC, JSON.stringify(history));
+  const data = JSON.stringify(history);
+  try {
+    if (redis) {
+      await redis.setex(`chat:${sessionId}`, SESSION_TTL_SEC, data);
+      return;
+    }
+  } catch (err) {
+    console.warn('[Redis] Failed to save chat history, falling back to memory');
+  }
+  
+  memoryStore.set(`chat:${sessionId}`, data);
 }
 
 // ============================================================================
