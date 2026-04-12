@@ -4,10 +4,11 @@ import {
   PolicyDryRunRequestSchema, 
   PolicyDryRunResponseSchema,
   DecisionReplaySchema
-} from '../schemas/contracts';
+} from '../schemas/contracts.js';
 import { z } from 'zod';
 
 const BACKEND_API_URL = process.env.PYTHON_API_URL || process.env.BACKEND_API_URL || 'https://dburt-proex-python-fastapi-backend.onrender.com';
+console.log('[BACKEND BRIDGE] Initialized with URL:', BACKEND_API_URL);
 
 async function fetchWithTimeout(url: string, options: RequestInit = {}, timeoutMs = 10000) {
   const controller = new AbortController();

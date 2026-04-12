@@ -1,18 +1,23 @@
 import React, { useState } from 'react';
-import { Play, ShieldAlert, CheckCircle2 } from 'lucide-react';
+import { Play, ShieldAlert, CheckCircle2, Sparkles } from 'lucide-react';
 import { api } from '../../lib/api';
 import { DryRunResult } from '../../types';
 import { ConfirmModal } from '../../components/ui/ConfirmModal';
+import Markdown from 'react-markdown';
 
 export function PolicyLab() {
   const [isSimulating, setIsSimulating] = useState(false);
   const [result, setResult] = useState<DryRunResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
+  
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [analysis, setAnalysis] = useState<any>(null);
 
   const runDryRun = async () => {
     setIsSimulating(true);
     setError(null);
+    setAnalysis(null);
     try {
       const data = await api.post<DryRunResult>('/policy/dryrun', {
         policyId: 'POL-102',
@@ -23,6 +28,22 @@ export function PolicyLab() {
       setError(err.message);
     } finally {
       setIsSimulating(false);
+    }
+  };
+
+  const analyzeImpact = async () => {
+    if (!result) return;
+    setIsAnalyzing(true);
+    try {
+      const data = await api.post<any>('/policy/analyze', {
+        policyId: 'POL-102',
+        dryRunResult: result
+      });
+      setAnalysis(data);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setIsAnalyzing(false);
     }
   };
 
@@ -117,7 +138,48 @@ export function PolicyLab() {
             </div>
           </div>
 
-          <div className="pt-4 border-t border-gray-800/60 flex justify-end">
+          {analysis && (
+            <div className="mt-6 p-5 bg-blue-500/5 border border-blue-500/20 rounded-lg space-y-4">
+              <div className="flex items-center gap-2 text-blue-400 mb-2">
+                <Sparkles className="w-4 h-4" />
+                <h4 className="font-medium text-sm">AI Policy Impact Analysis</h4>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <div className="text-xs text-gray-500 font-mono mb-1">SUMMARY</div>
+                  <div className="text-sm text-gray-300">{analysis.summary}</div>
+                </div>
+                <div>
+                  <div className="text-xs text-gray-500 font-mono mb-1">PREDICTED REVIEW LOAD</div>
+                  <div className="text-sm text-gray-300">{analysis.predictedReviewLoad}</div>
+                </div>
+                <div className="col-span-2">
+                  <div className="text-xs text-gray-500 font-mono mb-1">OUTCOME COMPARISON</div>
+                  <div className="text-sm text-gray-300">{analysis.outcomeComparison}</div>
+                </div>
+                <div className="col-span-2">
+                  <div className="text-xs text-gray-500 font-mono mb-1">APPROVAL BRIEF</div>
+                  <div className="text-sm text-gray-300 prose prose-invert prose-sm max-w-none">
+                    <Markdown>{analysis.approvalBrief}</Markdown>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className="pt-4 border-t border-gray-800/60 flex justify-between items-center">
+            <button 
+              onClick={analyzeImpact}
+              disabled={isAnalyzing || analysis !== null}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/20 text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
+            >
+              {isAnalyzing ? (
+                <div className="w-4 h-4 border-2 border-blue-400/30 border-t-blue-400 rounded-full animate-spin" />
+              ) : (
+                <Sparkles className="w-4 h-4" />
+              )}
+              {analysis ? 'Analysis Complete' : 'Analyze Impact'}
+            </button>
             <button 
               onClick={() => setIsConfirmOpen(true)}
               className="px-6 py-2.5 bg-red-600/20 hover:bg-red-600/30 text-red-400 border border-red-500/30 text-sm font-medium rounded-lg transition-colors"

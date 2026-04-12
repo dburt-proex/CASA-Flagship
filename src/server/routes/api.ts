@@ -1,16 +1,32 @@
 import { Router } from 'express';
 import { SignJWT } from 'jose';
-import { backendBridge } from '../services/backendBridge';
-import { geminiService } from '../services/gemini';
-import { requireAdminConfirmation } from '../middleware/audit';
-import { authenticate } from '../middleware/auth';
+import { backendBridge } from '../services/backendBridge.js';
+import { geminiService } from '../services/gemini.js';
+import { requireAdminConfirmation } from '../middleware/audit.js';
+import { authenticate } from '../middleware/auth.js';
 import { 
   ChatRequestSchema, 
   PolicyDryRunRequestSchema, 
   AdminApplyPolicySchema 
-} from '../schemas/contracts';
+} from '../schemas/contracts.js';
 
 export const apiRouter = Router();
+
+apiRouter.get('/debug-env', (req, res) => {
+  const aizaKeys: Record<string, string> = {};
+  for (const key in process.env) {
+    if (process.env[key]?.startsWith('AIza')) {
+      aizaKeys[key] = process.env[key]!.substring(0, 10) + '...';
+    }
+  }
+  res.json({
+    keys: Object.keys(process.env),
+    geminiKey: process.env.GEMINI_API_KEY,
+    casaKey: process.env['gemini-casa-api'],
+    casaKeyUpper: process.env.GEMINI_CASA_API,
+    aizaKeys
+  });
+});
 
 // ============================================================================
 // Dev Auth Endpoint (Local Development Only)
@@ -24,7 +40,7 @@ apiRouter.post('/auth/dev-login', async (req, res) => {
     const token = await new SignJWT({ role, email })
       .setProtectedHeader({ alg: 'HS256' })
       .setIssuedAt()
-      .setExpirationTime('2h')
+      .setExpirationTime('7d')
       .setSubject(email)
       .sign(JWT_SECRET);
       
@@ -87,6 +103,34 @@ apiRouter.post('/chat', authenticate, async (req, res) => {
   } catch (error: any) {
     console.error("Chat error:", error);
     res.status(500).json({ error: 'Failed to generate response' });
+  }
+});
+
+apiRouter.post('/explain', authenticate, async (req, res) => {
+  try {
+    const { context, data } = req.body;
+    if (!context || !data) {
+      return res.status(400).json({ error: 'Missing context or data' });
+    }
+    const explanation = await geminiService.explainData(context, data);
+    res.json({ explanation });
+  } catch (error: any) {
+    console.error('[API] Explain error:', error.message);
+    res.status(500).json({ error: 'Failed to generate explanation' });
+  }
+});
+
+apiRouter.post('/policy/analyze', authenticate, async (req, res) => {
+  try {
+    const { policyId, dryRunResult } = req.body;
+    if (!policyId || !dryRunResult) {
+      return res.status(400).json({ error: 'Missing policyId or dryRunResult' });
+    }
+    const analysis = await geminiService.analyzePolicy(policyId, dryRunResult);
+    res.json(analysis);
+  } catch (error: any) {
+    console.error('[API] Policy analysis error:', error.message);
+    res.status(500).json({ error: 'Failed to analyze policy' });
   }
 });
 

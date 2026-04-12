@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../../lib/api';
+import { ExplainButton } from '../../components/ExplainButton';
 
 export function BoundaryStress() {
   const [data, setData] = useState<any>(null);
@@ -14,6 +15,10 @@ export function BoundaryStress() {
 
   return (
     <div className="space-y-6 max-w-4xl">
+      <div className="flex justify-between items-center">
+        <h2 className="text-lg font-semibold text-gray-200">Boundary Stress Analysis</h2>
+        <ExplainButton context="CASA System Boundary Stress Analysis" data={data} />
+      </div>
       <div className="p-6 rounded-xl bg-[#12121a] border border-gray-800/60 shadow-lg">
         <h3 className="text-lg font-medium text-gray-200 mb-4">System Boundary Stress Level</h3>
         <div className="flex items-center gap-6">

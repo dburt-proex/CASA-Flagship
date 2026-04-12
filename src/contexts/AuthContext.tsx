@@ -23,9 +23,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const storedToken = localStorage.getItem('casa_token');
     const storedUser = localStorage.getItem('casa_user');
+    
     if (storedToken && storedUser) {
-      setToken(storedToken);
-      setUser(JSON.parse(storedUser));
+      try {
+        // Basic JWT decode to check expiration
+        const payloadBase64 = storedToken.split('.')[1];
+        const payload = JSON.parse(atob(payloadBase64));
+        const isExpired = payload.exp * 1000 < Date.now();
+        
+        if (isExpired) {
+          localStorage.removeItem('casa_token');
+          localStorage.removeItem('casa_user');
+        } else {
+          setToken(storedToken);
+          setUser(JSON.parse(storedUser));
+        }
+      } catch (e) {
+        // If token is malformed, clear it
+        localStorage.removeItem('casa_token');
+        localStorage.removeItem('casa_user');
+      }
     }
   }, []);
 

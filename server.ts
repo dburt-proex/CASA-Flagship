@@ -1,9 +1,9 @@
-import './src/server/env';
+import './src/server/env.js';
 import express from "express";
 import { createServer as createViteServer } from "vite";
 import path from "path";
 import crypto from "crypto";
-import { apiRouter } from "./src/server/routes/api";
+import { apiRouter } from "./src/server/routes/api.js";
 
 async function startServer() {
   const app = express();

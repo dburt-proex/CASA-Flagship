@@ -16,7 +16,10 @@ export async function authenticate(req: Request, res: Response, next: NextFuncti
     // Attach payload to request for downstream use
     (req as any).user = payload;
     next();
-  } catch (err) {
+  } catch (err: any) {
+    if (err.name === 'JWTExpired' || err.code === 'ERR_JWT_EXPIRED') {
+      return res.status(401).json({ error: 'Unauthorized', message: 'Token expired' });
+    }
     console.error('[Auth Error] JWT verification failed:', err);
     return res.status(401).json({ error: 'Unauthorized', message: 'Invalid or expired token' });
   }

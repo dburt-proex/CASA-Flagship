@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { api } from '../../lib/api';
 import { Search } from 'lucide-react';
+import { ExplainButton } from '../../components/ExplainButton';
 
 export function DecisionReplay() {
   const [decisionId, setDecisionId] = useState('');
@@ -49,6 +50,10 @@ export function DecisionReplay() {
 
       {data && (
         <div className="p-6 rounded-xl bg-[#12121a] border border-gray-800/60 shadow-lg space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+          <div className="flex justify-between items-center">
+            <h4 className="text-sm font-medium text-gray-200">Replay Results</h4>
+            <ExplainButton context={`CASA Decision Replay for ${decisionId}`} data={data} />
+          </div>
           <div className="grid grid-cols-3 gap-6">
             <div className="p-4 bg-[#0a0a0c] rounded-lg border border-gray-800/60">
               <div className="text-xs text-gray-500 font-mono mb-1">TIMESTAMP</div>

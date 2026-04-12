@@ -25,7 +25,10 @@ export async function requireAdminConfirmation(req: Request, res: Response, next
     const { payload: jwtPayload } = await jwtVerify(token, JWT_SECRET);
     payload = jwtPayload;
     (req as any).user = payload; // Consistency with authenticate middleware
-  } catch (err) {
+  } catch (err: any) {
+    if (err.name === 'JWTExpired' || err.code === 'ERR_JWT_EXPIRED') {
+      return res.status(401).json({ error: 'Unauthorized', message: 'Token expired' });
+    }
     console.error('[Auth Error] Admin JWT verification failed:', err);
     return res.status(401).json({ error: 'Unauthorized', message: 'Invalid or expired token' });
   }
