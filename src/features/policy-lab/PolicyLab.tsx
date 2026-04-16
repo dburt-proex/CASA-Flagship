@@ -160,7 +160,7 @@ export function PolicyLab() {
                 <div className="col-span-2">
                   <div className="text-xs text-gray-500 font-mono mb-1">APPROVAL BRIEF</div>
                   <div className="text-sm text-gray-300 prose prose-invert prose-sm max-w-none">
-                    <Markdown>{analysis.approvalBrief}</Markdown>
+                    <Markdown skipHtml disallowedElements={['script', 'iframe', 'object', 'embed']}>{analysis.approvalBrief}</Markdown>
                   </div>
                 </div>
               </div>

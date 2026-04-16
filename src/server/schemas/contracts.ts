@@ -18,8 +18,8 @@ export const BoundaryStressSchema = z.object({
 });
 
 export const PolicyDryRunRequestSchema = z.object({
-  policyId: z.string(),
-  parameters: z.record(z.string(), z.any()),
+  policyId: z.string().min(1).max(100),
+  parameters: z.record(z.string().max(100), z.unknown()),
   environment: z.enum(['staging', 'production']).default('staging'),
 });
 
@@ -35,7 +35,7 @@ export const DecisionReplaySchema = z.object({
   timestamp: z.string(),
   originalOutcome: z.string(),
   policyApplied: z.string(),
-  context: z.record(z.string(), z.any()),
+  context: z.record(z.string(), z.unknown()),
 });
 
 // ============================================================================
@@ -43,12 +43,12 @@ export const DecisionReplaySchema = z.object({
 // ============================================================================
 
 export const ChatRequestSchema = z.object({
-  sessionId: z.string().optional(),
-  message: z.string(),
+  sessionId: z.string().max(200).optional(),
+  message: z.string().min(1).max(10000),
 });
 
 export const AdminApplyPolicySchema = z.object({
-  policyId: z.string(),
-  confirmationCode: z.string(),
-  reason: z.string(),
+  policyId: z.string().min(1).max(100),
+  confirmationCode: z.string().min(1).max(200),
+  reason: z.string().min(1).max(2000),
 });

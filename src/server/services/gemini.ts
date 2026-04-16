@@ -1,7 +1,7 @@
 import { GoogleGenAI, Type, Content } from '@google/genai';
 import { backendBridge } from './backendBridge.js';
 import RedisLib from 'ioredis';
-const Redis = RedisLib.default || RedisLib;
+const Redis = (RedisLib as any).default || RedisLib;
 
 // ============================================================================
 // Configuration & Startup Validation
@@ -11,7 +11,7 @@ const rawApiKey = process.env.GEMINI_API_KEY?.trim() || process.env['gemini-casa
 if (!rawApiKey) {
   console.warn('[WARNING] GEMINI_API_KEY or gemini-casa-api is missing or blank. Chat features will not work until configured.');
 } else {
-  console.log(`[STARTUP] Gemini API Key configured. Prefix: ${rawApiKey.substring(0, 4)}...`);
+  console.log('[STARTUP] Gemini API Key configured.');
 }
 
 const ai = new GoogleGenAI({ apiKey: rawApiKey || 'UNCONFIGURED_KEY' });
@@ -36,6 +36,8 @@ if (!isLocalRedis) {
 
 const memoryStore = new Map<string, string>();
 const SESSION_TTL_SEC = 60 * 60; // 1 hour
+const MAX_MEMORY_SESSIONS = 1000;
+const MAX_FUNCTION_CALL_ITERATIONS = 10;
 
 async function getChatHistory(sessionId: string): Promise<Content[]> {
   try {
@@ -63,6 +65,11 @@ async function saveChatHistory(sessionId: string, history: Content[]) {
   }
   
   memoryStore.set(`chat:${sessionId}`, data);
+  // Evict oldest entries if store exceeds max size
+  if (memoryStore.size > MAX_MEMORY_SESSIONS) {
+    const oldestKey = memoryStore.keys().next().value;
+    if (oldestKey) memoryStore.delete(oldestKey);
+  }
 }
 
 // ============================================================================
@@ -198,8 +205,15 @@ export const geminiService = {
     try {
       let response: any = await withTimeout(chat.sendMessage({ message }), 30000);
 
-      // Handle Function Calling Loop
+      // Handle Function Calling Loop (with iteration limit)
+      let iterations = 0;
       while (response.functionCalls && response.functionCalls.length > 0) {
+        iterations++;
+        if (iterations > MAX_FUNCTION_CALL_ITERATIONS) {
+          console.warn(`[Gemini] Function calling loop exceeded ${MAX_FUNCTION_CALL_ITERATIONS} iterations. Breaking.`);
+          break;
+        }
+
         const functionResponses = [];
         
         for (const call of response.functionCalls) {
