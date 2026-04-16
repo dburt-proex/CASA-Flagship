@@ -26,7 +26,15 @@ async function startServer() {
   // Security Middleware
   // ============================================================================
   app.use(helmet({
-    contentSecurityPolicy: process.env.NODE_ENV === 'production' ? undefined : false,
+    contentSecurityPolicy: process.env.NODE_ENV === 'production' ? undefined : {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        connectSrc: ["'self'", "ws:", "wss:"],
+        imgSrc: ["'self'", "data:", "blob:"],
+      },
+    },
   }));
 
   const apiLimiter = rateLimit({
