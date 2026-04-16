@@ -10,7 +10,9 @@
     "build:server": "tsc server.ts --outDir dist/server --esModuleInterop --skipLibCheck --module NodeNext --moduleResolution NodeNext",
     "preview": "vite preview",
     "clean": "rm -rf dist",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@google-cloud/logging": "^11.2.1",
