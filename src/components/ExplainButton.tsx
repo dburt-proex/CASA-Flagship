@@ -73,7 +73,7 @@ export function ExplainButton({ context, data, className = '' }: ExplainButtonPr
                 </div>
               ) : (
                 <div className="prose prose-invert prose-sm max-w-none prose-p:leading-relaxed prose-pre:bg-gray-900 prose-pre:border prose-pre:border-gray-800">
-                  <Markdown>{explanation || ''}</Markdown>
+                  <Markdown skipHtml disallowedElements={['script', 'iframe', 'object', 'embed']}>{explanation || ''}</Markdown>
                 </div>
               )}
             </div>

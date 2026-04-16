@@ -12,29 +12,23 @@ import {
 
 export const apiRouter = Router();
 
-apiRouter.get('/debug-env', (req, res) => {
-  const aizaKeys: Record<string, string> = {};
-  for (const key in process.env) {
-    if (process.env[key]?.startsWith('AIza')) {
-      aizaKeys[key] = process.env[key]!.substring(0, 10) + '...';
-    }
-  }
-  res.json({
-    keys: Object.keys(process.env),
-    geminiKey: process.env.GEMINI_API_KEY,
-    casaKey: process.env['gemini-casa-api'],
-    casaKeyUpper: process.env.GEMINI_CASA_API,
-    aizaKeys
-  });
-});
-
 // ============================================================================
 // Dev Auth Endpoint (Local Development Only)
 // ============================================================================
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'default-secret-do-not-use-in-prod');
 
+const ALLOWED_ROLES = ['operator', 'admin'] as const;
+
 apiRouter.post('/auth/dev-login', async (req, res) => {
+  if (process.env.NODE_ENV === 'production') {
+    return res.status(404).json({ error: 'Not found' });
+  }
+
   const { role = 'operator', email = 'dev@casa.local' } = req.body;
+
+  if (!ALLOWED_ROLES.includes(role as any)) {
+    return res.status(400).json({ error: 'Invalid role' });
+  }
   
   try {
     const token = await new SignJWT({ role, email })

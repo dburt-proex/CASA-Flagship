@@ -1,5 +1,7 @@
 import './src/server/env.js';
 import express from "express";
+import helmet from "helmet";
+import rateLimit from "express-rate-limit";
 import { createServer as createViteServer } from "vite";
 import path from "path";
 import crypto from "crypto";
@@ -9,7 +11,49 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
-  app.use(express.json());
+  // ============================================================================
+  // Production JWT Secret Validation
+  // ============================================================================
+  if (process.env.NODE_ENV === 'production') {
+    const secret = process.env.JWT_SECRET;
+    if (!secret || secret === 'default-secret-do-not-use-in-prod' || secret === 'your-256-bit-secret') {
+      console.error('[FATAL] JWT_SECRET is not configured for production. Exiting.');
+      process.exit(1);
+    }
+  }
+
+  // ============================================================================
+  // Security Middleware
+  // ============================================================================
+  app.use(helmet({
+    contentSecurityPolicy: process.env.NODE_ENV === 'production' ? undefined : {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        connectSrc: ["'self'", "ws:", "wss:"],
+        imgSrc: ["'self'", "data:", "blob:"],
+      },
+    },
+  }));
+
+  const apiLimiter = rateLimit({
+    windowMs: 60 * 1000,  // 1 minute
+    max: 100,             // 100 requests per minute per IP
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: 'Too many requests, please try again later.' },
+  });
+
+  const authLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,  // 15 minutes
+    max: 20,                    // 20 auth attempts per 15 min
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: 'Too many authentication attempts, please try again later.' },
+  });
+
+  app.use(express.json({ limit: '1mb' }));
 
   // Request Correlation ID Middleware
   app.use((req, res, next) => {
@@ -17,6 +61,10 @@ async function startServer() {
     res.setHeader('X-Request-ID', req.headers['x-request-id']);
     next();
   });
+
+  // Apply rate limiters
+  app.use("/api/auth", authLimiter);
+  app.use("/api", apiLimiter);
 
   // Mount the modular API router
   app.use("/api", apiRouter);
@@ -28,7 +76,6 @@ async function startServer() {
       service: "casa-control-plane-node",
       config: {
         geminiConfigured: !!process.env.GEMINI_API_KEY?.trim(),
-        geminiPrefix: process.env.GEMINI_API_KEY ? process.env.GEMINI_API_KEY.substring(0, 4) : null
       }
     });
   });
