@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Activity, Shield, History, Settings, Play, MessageSquare, AlertTriangle, LogOut } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { Activity, Shield, History, Settings, Play, MessageSquare, AlertTriangle, LogOut, XCircle } from 'lucide-react';
 import { cn } from './lib/utils';
 import { PolicyLab } from './features/policy-lab/PolicyLab';
 import { OperatorChat } from './features/chat/OperatorChat';
@@ -8,10 +8,29 @@ import { BoundaryStress } from './features/stress/BoundaryStress';
 import { DecisionReplay } from './features/replay/DecisionReplay';
 import { useAuth } from './contexts/AuthContext';
 
+type ContractErrorDetail = {
+  endpoint: string;
+  issues: string[];
+};
+
 export default function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const { isAuthenticated, user, login, logout } = useAuth();
   const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const [contractError, setContractError] = useState<ContractErrorDetail | null>(null);
+
+  useEffect(() => {
+    const handleContractError = (event: Event) => {
+      const customEvent = event as CustomEvent<ContractErrorDetail>;
+      setContractError(customEvent.detail);
+    };
+
+    window.addEventListener('casa:contract-error', handleContractError);
+
+    return () => {
+      window.removeEventListener('casa:contract-error', handleContractError);
+    };
+  }, []);
 
   if (!isAuthenticated) {
     return (
@@ -75,7 +94,6 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-[#0a0a0c] text-gray-300 font-sans selection:bg-blue-500/30 flex">
-      {/* Sidebar */}
       <aside className="w-64 border-r border-gray-800/60 bg-[#0d0d12] flex flex-col z-10">
         <div className="p-6 border-b border-gray-800/60">
           <div className="flex items-center gap-3 text-blue-400 font-semibold tracking-wide">
@@ -97,10 +115,10 @@ export default function App() {
               key={item.id}
               onClick={() => setActiveTab(item.id)}
               className={cn(
-                "w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all duration-200",
-                activeTab === item.id 
-                  ? "bg-blue-500/10 text-blue-400 border border-blue-500/20 shadow-[0_0_15px_rgba(59,130,246,0.05)]" 
-                  : "text-gray-400 hover:bg-gray-800/50 hover:text-gray-200"
+                'w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all duration-200',
+                activeTab === item.id
+                  ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20 shadow-[0_0_15px_rgba(59,130,246,0.05)]'
+                  : 'text-gray-400 hover:bg-gray-800/50 hover:text-gray-200',
               )}
             >
               <item.icon className="w-4 h-4" />
@@ -114,7 +132,7 @@ export default function App() {
             <div>User: {user?.email}</div>
             <div>Role: <span className={user?.role === 'admin' ? 'text-red-400' : 'text-blue-400'}>{user?.role}</span></div>
           </div>
-          <button 
+          <button
             onClick={logout}
             className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium text-gray-400 hover:bg-gray-800/50 hover:text-red-400 transition-colors"
           >
@@ -124,7 +142,6 @@ export default function App() {
         </div>
       </aside>
 
-      {/* Main Content */}
       <main className="flex-1 flex flex-col h-screen overflow-hidden bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-blue-900/10 via-[#0a0a0c] to-[#0a0a0c]">
         <header className="h-16 border-b border-gray-800/60 flex items-center px-8 justify-between bg-[#0d0d12]/50 backdrop-blur-md z-10">
           <h1 className="text-lg font-medium text-gray-100 capitalize tracking-wide">
@@ -137,6 +154,31 @@ export default function App() {
             </div>
           </div>
         </header>
+
+        {contractError && (
+          <div className="mx-8 mt-6 rounded-xl border border-red-500/30 bg-red-500/10 px-5 py-4 text-sm text-red-100 shadow-[0_0_20px_rgba(239,68,68,0.08)]">
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex items-start gap-3">
+                <XCircle className="mt-0.5 h-5 w-5 text-red-400" />
+                <div>
+                  <div className="font-semibold tracking-wide text-red-300">Contract validation issue detected</div>
+                  <div className="mt-1 text-red-100/90">Endpoint: <span className="font-mono text-red-200">{contractError.endpoint}</span></div>
+                  <ul className="mt-2 list-disc space-y-1 pl-5 text-red-100/80">
+                    {contractError.issues.map((issue) => (
+                      <li key={issue}>{issue}</li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+              <button
+                onClick={() => setContractError(null)}
+                className="rounded-md border border-red-400/20 px-3 py-1 text-xs font-medium text-red-200 hover:bg-red-500/10"
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+        )}
 
         <div className="flex-1 overflow-auto p-8">
           {renderContent()}
