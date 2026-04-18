@@ -8,14 +8,11 @@ import { JWT_ENCODED_SECRET } from '../lib/jwtSecret.js';
 import { 
   ChatRequestSchema, 
   PolicyDryRunRequestSchema, 
-  AdminApplyPolicySchema 
+  AdminApplyPolicySchema,
+  ContractErrorLogSchema
 } from '../schemas/contracts.js';
 
 export const apiRouter = Router();
-
-// ============================================================================
-// Dev Auth Endpoint (Local Development Only)
-// ============================================================================
 
 const ALLOWED_ROLES = ['operator', 'admin'] as const;
 type AllowedRole = typeof ALLOWED_ROLES[number];
@@ -45,10 +42,6 @@ apiRouter.post('/auth/dev-login', async (req, res) => {
   }
 });
 
-// ============================================================================
-// Read-Only Governance Endpoints
-// ============================================================================
-
 apiRouter.get('/dashboard', async (req, res) => {
   try {
     const data = await backendBridge.getDashboard(req.headers['x-request-id'] as string);
@@ -76,10 +69,6 @@ apiRouter.get('/replay/:id', async (req, res) => {
   }
 });
 
-// ============================================================================
-// Simulation & AI Endpoints
-// ============================================================================
-
 apiRouter.post('/policy/dryrun', async (req, res) => {
   try {
     const payload = PolicyDryRunRequestSchema.parse(req.body);
@@ -87,6 +76,23 @@ apiRouter.post('/policy/dryrun', async (req, res) => {
     res.json(data);
   } catch (error: any) {
     res.status(400).json({ error: 'Invalid request schema', details: error });
+  }
+});
+
+apiRouter.post('/logs/contract-error', async (req, res) => {
+  try {
+    const payload = ContractErrorLogSchema.parse(req.body);
+
+    console.warn('[CASA CONTRACT LOG]', {
+      endpoint: payload.endpoint,
+      issues: payload.issues,
+      requestId: req.headers['x-request-id'],
+      timestamp: new Date().toISOString(),
+    });
+
+    res.json({ status: 'logged' });
+  } catch (error: any) {
+    res.status(400).json({ error: 'Invalid log schema', details: error });
   }
 });
 
@@ -128,10 +134,6 @@ apiRouter.post('/policy/analyze', authenticate, async (req, res) => {
     res.status(500).json({ error: 'Failed to analyze policy' });
   }
 });
-
-// ============================================================================
-// Protected Admin Write Endpoints
-// ============================================================================
 
 apiRouter.post('/admin/policy/apply', requireAdminConfirmation, async (req, res) => {
   try {
