@@ -18,12 +18,15 @@ export const apiRouter = Router();
 
 const ALLOWED_ROLES = ['operator', 'admin'] as const;
 type AllowedRole = typeof ALLOWED_ROLES[number];
+type Severity = 'low' | 'medium' | 'high';
 
 type ContractLogEntry = {
   endpoint: string;
   issues: string[];
   timestamp: string;
   requestId?: string;
+  severity: Severity;
+  score: number;
 };
 
 const LOG_DIR = path.join(process.cwd(), 'data');
@@ -45,7 +48,7 @@ function readContractLogs(): ContractLogEntry[] {
   try {
     const raw = fs.readFileSync(CONTRACT_LOG_PATH, 'utf-8');
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed as ContractLogEntry[] : [];
+    return Array.isArray(parsed) ? (parsed as ContractLogEntry[]) : [];
   } catch {
     return [];
   }
@@ -54,6 +57,43 @@ function readContractLogs(): ContractLogEntry[] {
 function writeContractLogs(entries: ContractLogEntry[]) {
   ensureLogStore();
   fs.writeFileSync(CONTRACT_LOG_PATH, JSON.stringify(entries, null, 2), 'utf-8');
+}
+
+function scoreIssue(issue: string): number {
+  const normalized = issue.toLowerCase();
+
+  if (
+    normalized.includes('<root>') ||
+    normalized.includes('expected') ||
+    normalized.includes('required') ||
+    normalized.includes('invalid')
+  ) {
+    return 3;
+  }
+
+  if (
+    normalized.includes('too_small') ||
+    normalized.includes('too_big') ||
+    normalized.includes('enum')
+  ) {
+    return 2;
+  }
+
+  return 1;
+}
+
+function scoreContractLog(issues: string[]): { severity: Severity; score: number } {
+  const score = issues.reduce((total, issue) => total + scoreIssue(issue), 0);
+
+  if (score >= 6) {
+    return { severity: 'high', score };
+  }
+
+  if (score >= 3) {
+    return { severity: 'medium', score };
+  }
+
+  return { severity: 'low', score };
 }
 
 apiRouter.post('/auth/dev-login', async (req, res) => {
@@ -121,12 +161,15 @@ apiRouter.post('/policy/dryrun', async (req, res) => {
 apiRouter.post('/logs/contract-error', async (req, res) => {
   try {
     const payload = ContractErrorLogSchema.parse(req.body);
+    const { severity, score } = scoreContractLog(payload.issues);
 
     const entry: ContractLogEntry = {
       endpoint: payload.endpoint,
       issues: payload.issues,
       requestId: req.headers['x-request-id'] as string | undefined,
       timestamp: new Date().toISOString(),
+      severity,
+      score,
     };
 
     const existing = readContractLogs();
@@ -135,7 +178,7 @@ apiRouter.post('/logs/contract-error', async (req, res) => {
 
     console.warn('[CASA CONTRACT LOG]', entry);
 
-    res.json({ status: 'logged' });
+    res.json({ status: 'logged', severity, score });
   } catch (error: any) {
     res.status(400).json({ error: 'Invalid log schema', details: error });
   }
@@ -146,9 +189,62 @@ apiRouter.get('/logs/contract-error', async (req, res) => {
     const logs = readContractLogs();
     const recent = logs.slice(-50).reverse();
 
+    const bySeverity = {
+      high: logs.filter((log) => log.severity === 'high').length,
+      medium: logs.filter((log) => log.severity === 'medium').length,
+      low: logs.filter((log) => log.severity === 'low').length,
+    };
+
+    const endpointMap = new Map<string, { count: number; highestSeverity: Severity; totalScore: number }>();
+
+    for (const log of logs) {
+      const current = endpointMap.get(log.endpoint);
+
+      if (!current) {
+        endpointMap.set(log.endpoint, {
+          count: 1,
+          highestSeverity: log.severity,
+          totalScore: log.score,
+        });
+        continue;
+      }
+
+      current.count += 1;
+      current.totalScore += log.score;
+
+      if (current.highestSeverity === 'low' && log.severity !== 'low') {
+        current.highestSeverity = log.severity;
+      }
+
+      if (current.highestSeverity === 'medium' && log.severity === 'high') {
+        current.highestSeverity = 'high';
+      }
+    }
+
+    const topEndpoints = Array.from(endpointMap.entries())
+      .map(([endpoint, value]) => ({
+        endpoint,
+        count: value.count,
+        highestSeverity: value.highestSeverity,
+        averageScore: Number((value.totalScore / value.count).toFixed(2)),
+      }))
+      .sort((a, b) => b.count - a.count || b.averageScore - a.averageScore)
+      .slice(0, 5);
+
+    const weightedRisk = logs.reduce((sum, log) => sum + log.score, 0);
+    const healthScore = Math.max(0, 100 - Math.min(100, weightedRisk));
+    const stability = healthScore >= 85 ? 'stable' : healthScore >= 60 ? 'degraded' : 'critical';
+
     res.json({
       total: logs.length,
       recent,
+      aggregates: {
+        bySeverity,
+        topEndpoints,
+        weightedRisk,
+        healthScore,
+        stability,
+      },
     });
   } catch (error: any) {
     res.status(500).json({ error: 'Failed to read contract logs' });
