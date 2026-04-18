@@ -17,6 +17,24 @@ export interface DryRunResult {
   logs: string[];
 }
 
+export interface PolicyScenarioConfig {
+  policyId: string;
+  environment: 'staging' | 'production';
+  threshold: number;
+}
+
+export interface DryRunComparison {
+  baselineThreshold: number;
+  candidateThreshold: number;
+  thresholdDelta: number;
+  baselineImpactScore: number;
+  candidateImpactScore: number;
+  impactDelta: number;
+  baselineOutcome: string;
+  candidateOutcome: string;
+  routingRecommendation: 'ship' | 'review' | 'halt';
+}
+
 // Mirrors DashboardSchema in src/server/schemas/contracts.ts
 export interface DashboardData {
   activePolicies: number;
