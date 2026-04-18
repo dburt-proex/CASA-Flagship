@@ -1,26 +1,27 @@
 import { Request, Response, NextFunction } from 'express';
 import { jwtVerify } from 'jose';
-
-const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'default-secret-do-not-use-in-prod');
+import { JWT_ENCODED_SECRET } from '../lib/jwtSecret.js';
+import type { AuthenticatedUser } from '../lib/authTypes.js';
 
 export async function authenticate(req: Request, res: Response, next: NextFunction) {
   const authHeader = req.headers.authorization;
 
   if (!authHeader?.startsWith('Bearer ')) {
-    return res.status(401).json({ error: 'Unauthorized', message: 'Missing or invalid authorization header' });
+    res.status(401).json({ error: 'Unauthorized', message: 'Missing or invalid authorization header' });
+    return;
   }
 
-  const token = authHeader.split(' ')[1];
+  const token = authHeader.slice(7); // skip 'Bearer '
   try {
-    const { payload } = await jwtVerify(token, JWT_SECRET);
-    // Attach payload to request for downstream use
-    (req as any).user = payload;
+    const { payload } = await jwtVerify(token, JWT_ENCODED_SECRET);
+    req.user = payload as AuthenticatedUser;
     next();
-  } catch (err: any) {
-    if (err.name === 'JWTExpired' || err.code === 'ERR_JWT_EXPIRED') {
-      return res.status(401).json({ error: 'Unauthorized', message: 'Token expired' });
+  } catch (err) {
+    if (err instanceof Error && (err.name === 'JWTExpired' || (err as NodeJS.ErrnoException).code === 'ERR_JWT_EXPIRED')) {
+      res.status(401).json({ error: 'Unauthorized', message: 'Token expired' });
+      return;
     }
     console.error('[Auth Error] JWT verification failed:', err);
-    return res.status(401).json({ error: 'Unauthorized', message: 'Invalid or expired token' });
+    res.status(401).json({ error: 'Unauthorized', message: 'Invalid or expired token' });
   }
 }

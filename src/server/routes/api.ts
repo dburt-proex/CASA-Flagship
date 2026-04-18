@@ -4,6 +4,7 @@ import { backendBridge } from '../services/backendBridge.js';
 import { geminiService } from '../services/gemini.js';
 import { requireAdminConfirmation } from '../middleware/audit.js';
 import { authenticate } from '../middleware/auth.js';
+import { JWT_ENCODED_SECRET } from '../lib/jwtSecret.js';
 import { 
   ChatRequestSchema, 
   PolicyDryRunRequestSchema, 
@@ -15,9 +16,9 @@ export const apiRouter = Router();
 // ============================================================================
 // Dev Auth Endpoint (Local Development Only)
 // ============================================================================
-const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'default-secret-do-not-use-in-prod');
 
 const ALLOWED_ROLES = ['operator', 'admin'] as const;
+type AllowedRole = typeof ALLOWED_ROLES[number];
 
 apiRouter.post('/auth/dev-login', async (req, res) => {
   if (process.env.NODE_ENV === 'production') {
@@ -26,17 +27,17 @@ apiRouter.post('/auth/dev-login', async (req, res) => {
 
   const { role = 'operator', email = 'dev@casa.local' } = req.body;
 
-  if (!ALLOWED_ROLES.includes(role as any)) {
+  if (!(ALLOWED_ROLES as ReadonlyArray<string>).includes(role)) {
     return res.status(400).json({ error: 'Invalid role' });
   }
   
   try {
-    const token = await new SignJWT({ role, email })
+    const token = await new SignJWT({ role: role as AllowedRole, email })
       .setProtectedHeader({ alg: 'HS256' })
       .setIssuedAt()
       .setExpirationTime('7d')
       .setSubject(email)
-      .sign(JWT_SECRET);
+      .sign(JWT_ENCODED_SECRET);
       
     res.json({ token, user: { role, email } });
   } catch (error) {
