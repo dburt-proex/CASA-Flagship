@@ -2,13 +2,14 @@ import React, { useEffect, useState } from 'react';
 import { api } from '../../lib/api';
 import { cn } from '../../lib/utils';
 import { ExplainButton } from '../../components/ExplainButton';
+import type { DashboardData } from '../../types';
 
 export function Dashboard() {
-  const [data, setData] = useState<any>(null);
+  const [data, setData] = useState<DashboardData | null>(null);
   const [error, setError] = useState('');
 
   useEffect(() => {
-    api.get('/dashboard').then(setData).catch(e => setError(e.message));
+    api.get<DashboardData>('/dashboard').then(setData).catch((e: unknown) => setError(e instanceof Error ? e.message : 'Failed to load'));
   }, []);
 
   if (error) return <div className="text-red-500 p-4 bg-red-500/10 rounded-lg border border-red-500/20">Error: {error}</div>;

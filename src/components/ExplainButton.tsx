@@ -5,7 +5,7 @@ import Markdown from 'react-markdown';
 
 interface ExplainButtonProps {
   context: string;
-  data: any;
+  data: unknown;
   className?: string;
 }
 
@@ -24,8 +24,8 @@ export function ExplainButton({ context, data, className = '' }: ExplainButtonPr
     try {
       const result = await api.post<{ explanation: string }>('/explain', { context, data });
       setExplanation(result.explanation);
-    } catch (err: any) {
-      setError(err.message || 'Failed to generate explanation');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to generate explanation');
     } finally {
       setIsLoading(false);
     }

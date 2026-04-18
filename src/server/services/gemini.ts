@@ -1,7 +1,14 @@
-import { GoogleGenAI, Type, Content } from '@google/genai';
+import { GoogleGenAI, Type, Content, type ToolListUnion } from '@google/genai';
 import { backendBridge } from './backendBridge.js';
 import RedisLib from 'ioredis';
-const Redis = (RedisLib as any).default || RedisLib;
+const Redis = (RedisLib as typeof RedisLib & { default?: typeof RedisLib }).default ?? RedisLib;
+
+// Minimal interface for the Redis operations used in this module.
+interface RedisClient {
+  get(key: string): Promise<string | null>;
+  setex(key: string, seconds: number, value: string): Promise<unknown>;
+  on(event: string, callback: (...args: unknown[]) => void): this;
+}
 
 // ============================================================================
 // Configuration & Startup Validation
@@ -20,15 +27,15 @@ const ai = new GoogleGenAI({ apiKey: rawApiKey || 'UNCONFIGURED_KEY' });
 const redisUrl = process.env.REDIS_URL;
 const isLocalRedis = !redisUrl || redisUrl.includes('localhost') || redisUrl.includes('127.0.0.1');
 
-let redis: any = null;
+let redis: RedisClient | null = null;
 if (!isLocalRedis) {
-  const RedisClass = (Redis as any).default || Redis;
-  redis = new RedisClass(redisUrl, {
+  const RedisClass = (Redis as typeof Redis & { default?: typeof Redis }).default ?? Redis;
+  redis = new RedisClass(redisUrl as string, {
     maxRetriesPerRequest: 1,
     retryStrategy: () => null // Do not retry if connection fails
   });
-  redis.on('error', (err) => {
-    console.warn('[Redis] Connection error:', err.message);
+  redis.on('error', (err: unknown) => {
+    console.warn('[Redis] Connection error:', err instanceof Error ? err.message : err);
   });
 } else {
   console.log('[STARTUP] Using in-memory session storage (Redis not configured or local)');
@@ -91,8 +98,8 @@ async function withTimeout<T>(promise: Promise<T>, ms: number = 15000): Promise<
 // ============================================================================
 // Error Handling Helper
 // ============================================================================
-function handleGeminiError(error: any, context: string, requestId?: string): never {
-  const errMsg = error.message || '';
+function handleGeminiError(error: unknown, context: string, requestId?: string): never {
+  const errMsg = error instanceof Error ? error.message : '';
   
   if (errMsg === 'GEMINI_TIMEOUT') {
     console.error(`[Gemini Error] ${context} timed out. RequestID: ${requestId}`);
@@ -147,10 +154,22 @@ const governanceTools = [{
   ]
 }];
 
+// Typed representation of a Gemini function call.
+interface FunctionCall {
+  name: string;
+  args: Record<string, unknown>;
+}
+
+// Minimal typed wrapper around the Gemini chat response.
+interface GeminiChatResponse {
+  text: string;
+  functionCalls?: FunctionCall[];
+}
+
 // ============================================================================
 // Tool Execution Router
 // ============================================================================
-async function executeTool(call: any, requestId?: string) {
+async function executeTool(call: FunctionCall, requestId?: string): Promise<unknown> {
   const { name, args } = call;
   console.log(`[Gemini Tool Call] Executing ${name} with args:`, args);
 
@@ -162,22 +181,30 @@ async function executeTool(call: any, requestId?: string) {
         return await backendBridge.getBoundaryStress(requestId);
       case 'runPolicyDryRun':
         return await backendBridge.runDryRun({ 
-          policyId: args.policyId, 
+          policyId: String(args.policyId ?? ''), 
           parameters: {}, 
-          environment: args.environment || 'staging' 
+          environment: (args.environment === 'production' ? 'production' : 'staging')
         }, requestId);
       case 'replayDecision':
-        return await backendBridge.replayDecision(args.decisionId, requestId);
+        return await backendBridge.replayDecision(String(args.decisionId ?? ''), requestId);
       default:
         throw new Error(`Unknown tool: ${name}`);
     }
-  } catch (error: any) {
+  } catch (error) {
     // Normalize Zod errors for LLM consumption
-    if (error.issues) {
-      return { error: "Validation failed", details: error.issues };
+    if (error !== null && typeof error === 'object' && 'issues' in error) {
+      return { error: "Validation failed", details: (error as { issues: unknown }).issues };
     }
-    return { error: error.message || "Unknown tool execution error" };
+    return { error: error instanceof Error ? error.message : "Unknown tool execution error" };
   }
+}
+
+// Matches the responseSchema defined in analyzePolicy below and PolicyAnalysis in src/types/index.ts.
+interface PolicyAnalysisResult {
+  summary: string;
+  predictedReviewLoad: string;
+  outcomeComparison: string;
+  approvalBrief: string;
 }
 
 // ============================================================================
@@ -197,24 +224,24 @@ export const geminiService = {
         - If a tool fails, explicitly state the uncertainty.
         - Format responses clearly for an operator console.`,
         temperature: 0.2,
-        tools: governanceTools,
+        tools: governanceTools as ToolListUnion,
         thinkingConfig: { thinkingLevel: 'HIGH' } as any,
       }
     });
 
     try {
-      let response: any = await withTimeout(chat.sendMessage({ message }), 30000);
+      let response = await withTimeout(chat.sendMessage({ message }), 30000) as GeminiChatResponse;
 
       // Handle Function Calling Loop (with iteration limit)
       let iterations = 0;
-      while (response.functionCalls && response.functionCalls.length > 0) {
+      while (Array.isArray(response.functionCalls) && response.functionCalls.length > 0) {
         iterations++;
         if (iterations > MAX_FUNCTION_CALL_ITERATIONS) {
           console.warn(`[Gemini] Function calling loop exceeded ${MAX_FUNCTION_CALL_ITERATIONS} iterations. Breaking.`);
           break;
         }
 
-        const functionResponses = [];
+        const functionResponses: Array<{ name: string; response: unknown }> = [];
         
         for (const call of response.functionCalls) {
           const result = await executeTool(call, requestId);
@@ -225,7 +252,7 @@ export const geminiService = {
         }
 
         // Send the tool results back to the model
-        response = await withTimeout(chat.sendMessage(functionResponses as any), 30000);
+        response = await withTimeout(chat.sendMessage(functionResponses as never), 30000) as GeminiChatResponse;
       }
 
       // Save updated history
@@ -233,12 +260,12 @@ export const geminiService = {
       await saveChatHistory(sessionId, updatedHistory);
 
       return response.text;
-    } catch (error: any) {
+    } catch (error) {
       handleGeminiError(error, 'Chat Request', requestId);
     }
   },
 
-  async explainData(context: string, data: any): Promise<string> {
+  async explainData(context: string, data: unknown): Promise<string> {
     try {
       const response = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
@@ -248,13 +275,13 @@ export const geminiService = {
           temperature: 0.3
         }
       });
-      return response.text || "No explanation generated.";
-    } catch (error: any) {
+      return response.text ?? "No explanation generated.";
+    } catch (error) {
       handleGeminiError(error, 'Explain Data');
     }
   },
 
-  async analyzePolicy(policyId: string, dryRunResult: any): Promise<any> {
+  async analyzePolicy(policyId: string, dryRunResult: unknown): Promise<PolicyAnalysisResult> {
     try {
       const response = await ai.models.generateContent({
         model: 'gemini-3.1-pro-preview',
@@ -278,12 +305,12 @@ export const geminiService = {
       });
       
       try {
-        return JSON.parse(response.text || "{}");
+        return JSON.parse(response.text ?? "{}") as PolicyAnalysisResult;
       } catch (e) {
         console.error("Failed to parse policy analysis JSON", e);
         throw new Error("Failed to generate structured policy analysis.");
       }
-    } catch (error: any) {
+    } catch (error) {
       handleGeminiError(error, 'Analyze Policy');
     }
   }
