@@ -23,5 +23,6 @@ export async function authenticate(req: Request, res: Response, next: NextFuncti
     }
     console.error('[Auth Error] JWT verification failed:', err);
     res.status(401).json({ error: 'Unauthorized', message: 'Invalid or expired token' });
+    return;
   }
 }

@@ -86,7 +86,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = async (role: string = 'operator') => {
     // Dev login is only permitted in non-production environments.
     // The server-side endpoint also enforces this, but we gate early.
-    if (process.env.NODE_ENV === 'production') {
+    if (import.meta.env.PROD) {
       console.error('[Auth] Dev login is disabled in production.');
       return;
     }
