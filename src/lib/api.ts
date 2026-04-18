@@ -20,12 +20,29 @@ export class ApiContractError extends Error {
   }
 }
 
+async function sendToBackend(error: ApiContractError) {
+  try {
+    await fetch('/api/logs/contract-error', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        endpoint: error.endpoint,
+        issues: error.issues,
+      }),
+    });
+  } catch {
+    // logging must never break runtime behavior
+  }
+}
+
 function reportContractError(error: ApiContractError): void {
   console.error('[CASA contract error]', {
     endpoint: error.endpoint,
     issues: error.issues,
     payload: error.payload,
   });
+
+  void sendToBackend(error);
 
   if (typeof window !== 'undefined') {
     window.dispatchEvent(
