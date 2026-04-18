@@ -52,3 +52,8 @@ export const AdminApplyPolicySchema = z.object({
   confirmationCode: z.string().min(1).max(200),
   reason: z.string().min(1).max(2000),
 });
+
+export const ContractErrorLogSchema = z.object({
+  endpoint: z.string().min(1).max(500),
+  issues: z.array(z.string().min(1).max(500)).min(1).max(20),
+});
