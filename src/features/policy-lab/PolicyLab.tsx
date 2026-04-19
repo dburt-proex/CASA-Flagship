@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Play, ShieldAlert, CheckCircle2, Sparkles } from 'lucide-react';
 import { api } from '../../lib/api';
-import { DryRunResult, PolicyAnalysis } from '../../types';
+import { DryRunResult } from '../../types';
 import { ConfirmModal } from '../../components/ui/ConfirmModal';
 import Markdown from 'react-markdown';
 
@@ -12,7 +12,7 @@ export function PolicyLab() {
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
   
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [analysis, setAnalysis] = useState<PolicyAnalysis | null>(null);
+  const [analysis, setAnalysis] = useState<any>(null);
 
   const runDryRun = async () => {
     setIsSimulating(true);
@@ -24,8 +24,8 @@ export function PolicyLab() {
         parameters: { threshold: 0.8 }
       });
       setResult(data);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Simulation failed');
+    } catch (err: any) {
+      setError(err.message);
     } finally {
       setIsSimulating(false);
     }
@@ -35,13 +35,13 @@ export function PolicyLab() {
     if (!result) return;
     setIsAnalyzing(true);
     try {
-      const data = await api.post<PolicyAnalysis>('/policy/analyze', {
+      const data = await api.post<any>('/policy/analyze', {
         policyId: 'POL-102',
-        dryRunResult: result as unknown as Record<string, unknown>
+        dryRunResult: result
       });
       setAnalysis(data);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Analysis failed');
+    } catch (err: any) {
+      setError(err.message);
     } finally {
       setIsAnalyzing(false);
     }
@@ -160,7 +160,7 @@ export function PolicyLab() {
                 <div className="col-span-2">
                   <div className="text-xs text-gray-500 font-mono mb-1">APPROVAL BRIEF</div>
                   <div className="text-sm text-gray-300 prose prose-invert prose-sm max-w-none">
-                    <Markdown skipHtml disallowedElements={['script', 'iframe', 'object', 'embed']}>{analysis.approvalBrief}</Markdown>
+                    <Markdown>{analysis.approvalBrief}</Markdown>
                   </div>
                 </div>
               </div>

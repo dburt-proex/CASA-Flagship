@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
-import { Activity, Shield, History, Settings, Play, MessageSquare, AlertTriangle, LogOut } from 'lucide-react';
+import { Activity, Shield, History, Settings, Play, MessageSquare, AlertTriangle, LogOut, ShieldAlert, Terminal } from 'lucide-react';
 import { cn } from './lib/utils';
 import { PolicyLab } from './features/policy-lab/PolicyLab';
 import { OperatorChat } from './features/chat/OperatorChat';
 import { Dashboard } from './features/dashboard/Dashboard';
 import { BoundaryStress } from './features/stress/BoundaryStress';
 import { DecisionReplay } from './features/replay/DecisionReplay';
+import { ReviewGate } from './features/review/ReviewGate';
+import { OpsMetricsView } from './components/OpsMetricsView';
 import { useAuth } from './contexts/AuthContext';
 
 export default function App() {
@@ -56,6 +58,8 @@ export default function App() {
     switch (activeTab) {
       case 'dashboard':
         return <Dashboard />;
+      case 'review':
+        return <ReviewGate />;
       case 'dry-run':
         return <PolicyLab />;
       case 'analysis':
@@ -64,6 +68,8 @@ export default function App() {
         return <DecisionReplay />;
       case 'chat':
         return <OperatorChat />;
+      case 'ops':
+        return <OpsMetricsView />;
       default:
         return (
           <div className="flex items-center justify-center h-full text-gray-500 font-mono text-sm">
@@ -88,10 +94,12 @@ export default function App() {
         <nav className="flex-1 p-4 space-y-1">
           {[
             { id: 'dashboard', icon: Activity, label: 'System Dashboard' },
+            { id: 'review', icon: ShieldAlert, label: 'Review Gate' },
             { id: 'dry-run', icon: Play, label: 'Policy Lab' },
             { id: 'analysis', icon: AlertTriangle, label: 'Boundary Stress' },
-            { id: 'history', icon: History, label: 'Decision Replay' },
+            { id: 'history', icon: History, label: 'Audit Ledger' },
             { id: 'chat', icon: MessageSquare, label: 'Operator Chat' },
+            { id: 'ops', icon: Terminal, label: 'Ops Metrics' },
           ].map((item) => (
             <button
               key={item.id}

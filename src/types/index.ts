@@ -16,19 +16,3 @@ export interface DryRunResult {
   impactScore: number;
   logs: string[];
 }
-
-// Mirrors DashboardSchema in src/server/schemas/contracts.ts
-export interface DashboardData {
-  activePolicies: number;
-  decisions24h: number;
-  boundaryAlerts: number;
-  systemStatus: 'healthy' | 'degraded' | 'critical';
-}
-
-// Structured result returned by the Gemini policy analysis endpoint.
-export interface PolicyAnalysis {
-  summary: string;
-  predictedReviewLoad: string;
-  outcomeComparison: string;
-  approvalBrief: string;
-}

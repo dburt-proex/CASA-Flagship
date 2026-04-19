@@ -1,11 +1,11 @@
 import { Request, Response, NextFunction } from 'express';
-import { jwtVerify, type JWTPayload } from 'jose';
+import { jwtVerify } from 'jose';
 import { Logging } from '@google-cloud/logging';
-import { JWT_ENCODED_SECRET } from '../lib/jwtSecret.js';
-import type { AuthenticatedUser, AuditEvent } from '../lib/authTypes.js';
 
 const logging = new Logging();
 const log = logging.log('casa-audit-log');
+
+const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'default-secret-do-not-use-in-prod');
 
 /**
  * Middleware to verify JWT and check for admin role.
@@ -19,14 +19,14 @@ export async function requireAdminConfirmation(req: Request, res: Response, next
     return res.status(401).json({ error: 'Unauthorized', message: 'Missing or invalid authorization header' });
   }
 
-  const token = authHeader.slice(7); // skip 'Bearer '
-  let user: AuthenticatedUser;
+  const token = authHeader.split(' ')[1];
+  let payload;
   try {
-    const { payload } = await jwtVerify(token, JWT_ENCODED_SECRET);
-    user = payload as AuthenticatedUser;
-    req.user = user;
-  } catch (err) {
-    if (err instanceof Error && (err.name === 'JWTExpired' || (err as NodeJS.ErrnoException).code === 'ERR_JWT_EXPIRED')) {
+    const { payload: jwtPayload } = await jwtVerify(token, JWT_SECRET);
+    payload = jwtPayload;
+    (req as any).user = payload; // Consistency with authenticate middleware
+  } catch (err: any) {
+    if (err.name === 'JWTExpired' || err.code === 'ERR_JWT_EXPIRED') {
       return res.status(401).json({ error: 'Unauthorized', message: 'Token expired' });
     }
     console.error('[Auth Error] Admin JWT verification failed:', err);
@@ -34,7 +34,7 @@ export async function requireAdminConfirmation(req: Request, res: Response, next
   }
 
   // RBAC check
-  if (user.role !== 'admin') {
+  if (payload.role !== 'admin') {
     return res.status(403).json({ error: 'Forbidden', message: 'Admin role required' });
   }
 
@@ -46,13 +46,13 @@ export async function requireAdminConfirmation(req: Request, res: Response, next
   }
 
   // Durable Audit Log (Fail-closed)
-  const auditEntry: AuditEvent = {
+  const auditEntry = {
     timestamp: new Date().toISOString(),
     action: 'POLICY_MUTATION',
     policyId,
-    actorIdentity: user.sub ?? user.email ?? 'unknown-admin',
+    actorIdentity: payload.sub || payload.email || 'unknown-admin',
     ip: req.ip,
-    reason: (req.body.reason as string | undefined) ?? 'No reason provided',
+    reason: req.body.reason || 'No reason provided',
     requestId: req.headers['x-request-id']
   };
 

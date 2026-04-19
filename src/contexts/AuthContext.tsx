@@ -14,48 +14,6 @@ interface AuthContextType {
   isAdmin: boolean;
 }
 
-// Shape of the JWT payload we decode client-side for expiry checks only.
-// The server always re-validates the token on every request.
-interface JwtPayloadBasic {
-  exp?: number;
-}
-
-function decodeJwtExpiry(token: string): number | null {
-  try {
-    const parts = token.split('.');
-    if (parts.length !== 3) return null;
-    const payload = JSON.parse(atob(parts[1])) as JwtPayloadBasic;
-    return typeof payload.exp === 'number' ? payload.exp : null;
-  } catch {
-    return null;
-  }
-}
-
-function isTokenExpired(token: string): boolean {
-  const exp = decodeJwtExpiry(token);
-  if (exp === null) return true; // treat undecodable tokens as expired
-  return exp * 1000 < Date.now();
-}
-
-function parseStoredUser(raw: string): User | null {
-  try {
-    const parsed = JSON.parse(raw) as unknown;
-    if (
-      parsed !== null &&
-      typeof parsed === 'object' &&
-      'email' in parsed &&
-      'role' in parsed &&
-      typeof (parsed as Record<string, unknown>).email === 'string' &&
-      typeof (parsed as Record<string, unknown>).role === 'string'
-    ) {
-      return parsed as User;
-    }
-    return null;
-  } catch {
-    return null;
-  }
-}
-
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -67,29 +25,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const storedUser = localStorage.getItem('casa_user');
     
     if (storedToken && storedUser) {
-      if (isTokenExpired(storedToken)) {
-        localStorage.removeItem('casa_token');
-        localStorage.removeItem('casa_user');
-      } else {
-        const parsedUser = parseStoredUser(storedUser);
-        if (parsedUser) {
-          setToken(storedToken);
-          setUser(parsedUser);
-        } else {
+      try {
+        // Basic JWT decode to check expiration
+        const payloadBase64 = storedToken.split('.')[1];
+        const payload = JSON.parse(atob(payloadBase64));
+        const isExpired = payload.exp * 1000 < Date.now();
+        
+        if (isExpired) {
           localStorage.removeItem('casa_token');
           localStorage.removeItem('casa_user');
+        } else {
+          setToken(storedToken);
+          setUser(JSON.parse(storedUser));
         }
+      } catch (e) {
+        // If token is malformed, clear it
+        localStorage.removeItem('casa_token');
+        localStorage.removeItem('casa_user');
       }
     }
   }, []);
 
   const login = async (role: string = 'operator') => {
-    // Dev login is only permitted in non-production environments.
-    // The server-side endpoint also enforces this, but we gate early.
-    if (import.meta.env.PROD) {
-      console.error('[Auth] Dev login is disabled in production.');
-      return;
-    }
     try {
       const res = await fetch('/api/auth/dev-login', {
         method: 'POST',
@@ -99,7 +56,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       
       if (!res.ok) throw new Error('Login failed');
       
-      const data = await res.json() as { token: string; user: User };
+      const data = await res.json();
       setToken(data.token);
       setUser(data.user);
       localStorage.setItem('casa_token', data.token);

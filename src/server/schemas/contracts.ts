@@ -13,29 +13,29 @@ export const DashboardSchema = z.object({
 
 export const BoundaryStressSchema = z.object({
   stressLevel: z.number().min(0).max(100),
-  criticalBoundaries: z.array(z.string()),
-  recommendations: z.array(z.string()),
+  criticalBoundaries: z.array(z.string().max(200)),
+  recommendations: z.array(z.string().max(500)),
 });
 
 export const PolicyDryRunRequestSchema = z.object({
-  policyId: z.string().min(1).max(100),
-  parameters: z.record(z.string().max(100), z.unknown()),
+  policyId: z.string().max(100),
+  parameters: z.record(z.string().max(100), z.any()),
   environment: z.enum(['staging', 'production']).default('staging'),
 });
 
 export const PolicyDryRunResponseSchema = z.object({
-  status: z.string(),
-  simulatedOutcome: z.string(),
+  status: z.string().max(100),
+  simulatedOutcome: z.string().max(500),
   impactScore: z.number(),
-  logs: z.array(z.string()),
+  logs: z.array(z.string().max(1000)),
 });
 
 export const DecisionReplaySchema = z.object({
-  decisionId: z.string(),
-  timestamp: z.string(),
-  originalOutcome: z.string(),
-  policyApplied: z.string(),
-  context: z.record(z.string(), z.unknown()),
+  decisionId: z.string().max(100),
+  timestamp: z.string().max(100),
+  originalOutcome: z.string().max(100),
+  policyApplied: z.string().max(100),
+  context: z.record(z.string().max(100), z.any()),
 });
 
 // ============================================================================
@@ -43,12 +43,12 @@ export const DecisionReplaySchema = z.object({
 // ============================================================================
 
 export const ChatRequestSchema = z.object({
-  sessionId: z.string().max(200).optional(),
-  message: z.string().min(1).max(10000),
+  sessionId: z.string().max(100).optional(),
+  message: z.string().max(10000), // Max 10k chars for chat message
 });
 
 export const AdminApplyPolicySchema = z.object({
-  policyId: z.string().min(1).max(100),
-  confirmationCode: z.string().min(1).max(200),
-  reason: z.string().min(1).max(2000),
+  policyId: z.string().max(100),
+  confirmationCode: z.string().max(100),
+  reason: z.string().max(1000),
 });

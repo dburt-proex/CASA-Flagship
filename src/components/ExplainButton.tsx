@@ -5,7 +5,7 @@ import Markdown from 'react-markdown';
 
 interface ExplainButtonProps {
   context: string;
-  data: unknown;
+  data: any;
   className?: string;
 }
 
@@ -24,8 +24,8 @@ export function ExplainButton({ context, data, className = '' }: ExplainButtonPr
     try {
       const result = await api.post<{ explanation: string }>('/explain', { context, data });
       setExplanation(result.explanation);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to generate explanation');
+    } catch (err: any) {
+      setError(err.message || 'Failed to generate explanation');
     } finally {
       setIsLoading(false);
     }
@@ -73,7 +73,7 @@ export function ExplainButton({ context, data, className = '' }: ExplainButtonPr
                 </div>
               ) : (
                 <div className="prose prose-invert prose-sm max-w-none prose-p:leading-relaxed prose-pre:bg-gray-900 prose-pre:border prose-pre:border-gray-800">
-                  <Markdown skipHtml disallowedElements={['script', 'iframe', 'object', 'embed']}>{explanation || ''}</Markdown>
+                  <Markdown>{explanation || ''}</Markdown>
                 </div>
               )}
             </div>
