@@ -7,14 +7,16 @@ import {
 } from '../schemas/contracts.js';
 import { z } from 'zod';
 
-let BACKEND_API_URL = process.env.PYTHON_API_URL || process.env.BACKEND_API_URL || 'https://dburt-proex-python-fastapi-backend.onrender.com';
-if (BACKEND_API_URL.includes('127.0.0.1')) {
-  BACKEND_API_URL = 'https://dburt-proex-python-fastapi-backend.onrender.com';
+let BACKEND_API_URL = process.env.CASA_GOVERNANCE_API_URL || process.env.CASA_API_URL || process.env.BACKEND_API_URL || 'http://127.0.0.1:5000';
+if (BACKEND_API_URL.startsWith('CASA_GOVERNANCE_API_URL=')) {
+  BACKEND_API_URL = BACKEND_API_URL.replace('CASA_GOVERNANCE_API_URL=', '');
 }
-if (BACKEND_API_URL.startsWith('PYTHON_API_URL=')) {
-  BACKEND_API_URL = BACKEND_API_URL.replace('PYTHON_API_URL=', '');
+if (BACKEND_API_URL.endsWith('/')) {
+  BACKEND_API_URL = BACKEND_API_URL.slice(0, -1);
 }
-console.log('[BACKEND BRIDGE] Initialized with URL:', BACKEND_API_URL);
+console.log('[BACKEND BRIDGE] Initialized with canonical CASA Governance API:', BACKEND_API_URL);
+
+type JsonRecord = Record<string, any>;
 
 async function fetchWithTimeout(url: string, options: RequestInit = {}, timeoutMs = 10000) {
   const controller = new AbortController();
@@ -50,49 +52,97 @@ async function fetchWithTimeout(url: string, options: RequestInit = {}, timeoutM
   }
 }
 
+function normalizeSystemStatus(raw: JsonRecord): 'healthy' | 'degraded' | 'critical' {
+  const status = String(raw.system_state?.mode || raw.boundary_stress?.system_state || raw.systemStatus || raw.status || '').toUpperCase();
+  if (status.includes('CRITICAL') || status.includes('HALT') || status.includes('ATTENTION')) return 'critical';
+  if (status.includes('CAUTION') || status.includes('REVIEW') || status.includes('DEGRADED')) return 'degraded';
+  return 'healthy';
+}
+
+function normalizeDashboard(raw: JsonRecord): z.infer<typeof DashboardSchema> {
+  const health = raw.governance_health || {};
+  const stress = raw.boundary_stress || {};
+  const warnings = Array.isArray(stress.warnings) ? stress.warnings : [];
+
+  return DashboardSchema.parse({
+    activePolicies: Number(raw.activePolicies ?? raw.system_state?.policy_version ? 1 : 1),
+    decisions24h: Number(raw.decisions24h ?? health.total_decisions ?? 0),
+    boundaryAlerts: Number(raw.boundaryAlerts ?? warnings.length),
+    systemStatus: normalizeSystemStatus(raw)
+  });
+}
+
+function normalizeBoundaryStress(raw: JsonRecord): z.infer<typeof BoundaryStressSchema> {
+  const warnings = Array.isArray(raw.warnings) ? raw.warnings : [];
+  const recommendations = warnings.length ? warnings : [String(raw.system_state || 'STABLE')];
+  const stressScore = Number(raw.stressLevel ?? raw.stress_score ?? 0);
+
+  return BoundaryStressSchema.parse({
+    stressLevel: stressScore <= 1 ? Math.round(stressScore * 100) : Math.round(stressScore),
+    criticalBoundaries: warnings.map(String),
+    recommendations: recommendations.map(String)
+  });
+}
+
+function normalizePolicyDryRun(raw: JsonRecord): z.infer<typeof PolicyDryRunResponseSchema> {
+  const conflicts = Array.isArray(raw.conflicts) ? raw.conflicts : [];
+  const indicators = Array.isArray(raw.risk_indicators) ? raw.risk_indicators : [];
+  const logs = Array.isArray(raw.logs) ? raw.logs : [...conflicts, ...indicators].map((item) => typeof item === 'string' ? item : JSON.stringify(item));
+
+  return PolicyDryRunResponseSchema.parse({
+    status: String(raw.status || raw.recommendation || 'SIMULATED'),
+    simulatedOutcome: String(raw.simulatedOutcome || `${raw.decisions_that_change ?? 0} decisions would change under candidate policy.`),
+    impactScore: Number(raw.impactScore ?? raw.routing_changes ?? raw.decisions_that_change ?? 0),
+    logs
+  });
+}
+
+function normalizeDecisionReplay(raw: JsonRecord, decisionId: string): z.infer<typeof DecisionReplaySchema> {
+  return DecisionReplaySchema.parse({
+    decisionId: String(raw.decisionId || raw.decision_id || decisionId),
+    timestamp: String(raw.timestamp || raw.time || raw.created_at || ''),
+    originalOutcome: String(raw.originalOutcome || raw.original_decision || raw.decision || 'unknown'),
+    policyApplied: String(raw.policyApplied || raw.policy_version || raw.current_policy_version || 'unknown'),
+    context: raw.context || raw.signals || raw
+  });
+}
+
 export const backendBridge = {
   async getDashboard(requestId?: string): Promise<z.infer<typeof DashboardSchema>> {
     const headers = requestId ? { 'X-Request-ID': requestId } : {};
-    const data = await fetchWithTimeout(`${BACKEND_API_URL}/api/v1/dashboard`, { headers });
-    return DashboardSchema.parse(data);
+    const data = await fetchWithTimeout(`${BACKEND_API_URL}/dashboard`, { headers });
+    return normalizeDashboard(data);
   },
 
   async getBoundaryStress(requestId?: string): Promise<z.infer<typeof BoundaryStressSchema>> {
     const headers = requestId ? { 'X-Request-ID': requestId } : {};
-    const data = await fetchWithTimeout(`${BACKEND_API_URL}/api/v1/boundary-stress`, { headers });
-    return BoundaryStressSchema.parse(data);
+    const data = await fetchWithTimeout(`${BACKEND_API_URL}/boundary-stress`, { headers });
+    return normalizeBoundaryStress(data);
   },
 
   async runDryRun(payload: z.infer<typeof PolicyDryRunRequestSchema>, requestId?: string): Promise<z.infer<typeof PolicyDryRunResponseSchema>> {
-    PolicyDryRunRequestSchema.parse(payload);
+    const parsed = PolicyDryRunRequestSchema.parse(payload);
     const headers = {
       'Content-Type': 'application/json',
       ...(requestId ? { 'X-Request-ID': requestId } : {})
     };
-    const data = await fetchWithTimeout(`${BACKEND_API_URL}/api/v1/policy/dryrun`, {
+    const data = await fetchWithTimeout(`${BACKEND_API_URL}/policy/dryrun`, {
       method: 'POST',
       headers,
-      body: JSON.stringify(payload)
+      body: JSON.stringify({
+        policy_candidate_path: parsed.parameters?.policy_candidate_path || parsed.parameters?.policyCandidatePath || parsed.policyId
+      })
     });
-    return PolicyDryRunResponseSchema.parse(data);
+    return normalizePolicyDryRun(data);
   },
 
   async replayDecision(decisionId: string, requestId?: string): Promise<z.infer<typeof DecisionReplaySchema>> {
     const headers = requestId ? { 'X-Request-ID': requestId } : {};
-    const data = await fetchWithTimeout(`${BACKEND_API_URL}/api/v1/decision-replay/${decisionId}`, { headers });
-    return DecisionReplaySchema.parse(data);
+    const data = await fetchWithTimeout(`${BACKEND_API_URL}/decision-replay/${decisionId}`, { headers });
+    return normalizeDecisionReplay(data, decisionId);
   },
 
-  async applyPolicy(policyId: string, reason: string, requestId?: string): Promise<{ success: boolean; auditId: string }> {
-    const headers = {
-      'Content-Type': 'application/json',
-      ...(requestId ? { 'X-Request-ID': requestId } : {})
-    };
-    const data = await fetchWithTimeout(`${BACKEND_API_URL}/api/v1/admin/policy/apply`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({ policyId, reason })
-    });
-    return data;
+  async applyPolicy(_policyId: string, _reason: string, _requestId?: string): Promise<{ success: boolean; auditId: string }> {
+    throw new Error('Canonical CASA governance API does not yet expose admin policy apply. Add this endpoint in casa-control-plane before enabling policy mutation from CASA-Flagship.');
   }
 };
