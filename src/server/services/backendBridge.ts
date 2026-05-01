@@ -65,7 +65,11 @@ function normalizeDashboard(raw: JsonRecord): z.infer<typeof DashboardSchema> {
   const warnings = Array.isArray(stress.warnings) ? stress.warnings : [];
 
   return DashboardSchema.parse({
-    activePolicies: Number(raw.activePolicies ?? raw.system_state?.policy_version ? 1 : 1),
+    activePolicies: Number(
+      raw.activePolicies ??
+      raw.active_policies ??
+      (raw.system_state?.policy_version ? 1 : 0)
+    ),
     decisions24h: Number(raw.decisions24h ?? health.total_decisions ?? 0),
     boundaryAlerts: Number(raw.boundaryAlerts ?? warnings.length),
     systemStatus: normalizeSystemStatus(raw)
@@ -138,7 +142,7 @@ export const backendBridge = {
 
   async replayDecision(decisionId: string, requestId?: string): Promise<z.infer<typeof DecisionReplaySchema>> {
     const headers = requestId ? { 'X-Request-ID': requestId } : {};
-    const data = await fetchWithTimeout(`${BACKEND_API_URL}/decision-replay/${decisionId}`, { headers });
+    const data = await fetchWithTimeout(`${BACKEND_API_URL}/decision-replay/${encodeURIComponent(decisionId)}`, { headers });
     return normalizeDecisionReplay(data, decisionId);
   },
 
