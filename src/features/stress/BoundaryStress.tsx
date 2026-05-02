@@ -28,22 +28,30 @@ export function BoundaryStress() {
           </div>
         </div>
       </div>
-      <div className="grid grid-cols-2 gap-6">
+        <div className="grid grid-cols-2 gap-6">
         <div className="p-6 rounded-xl bg-[#12121a] border border-gray-800/60 shadow-lg">
           <h4 className="text-sm font-medium text-gray-500 uppercase tracking-wider mb-4">Critical Boundaries</h4>
-          <ul className="space-y-3">
-            {data.criticalBoundaries.map((b: string, i: number) => (
-              <li key={i} className="text-amber-400 bg-amber-400/10 px-4 py-3 rounded-lg border border-amber-400/20 font-mono text-sm">{b}</li>
-            ))}
-          </ul>
+          {data.criticalBoundaries.length === 0 ? (
+            <p className="text-sm text-emerald-400 font-mono">No critical boundaries detected.</p>
+          ) : (
+            <ul className="space-y-3">
+              {data.criticalBoundaries.map((b: string, i: number) => (
+                <li key={i} className="text-amber-400 bg-amber-400/10 px-4 py-3 rounded-lg border border-amber-400/20 font-mono text-sm">{b}</li>
+              ))}
+            </ul>
+          )}
         </div>
         <div className="p-6 rounded-xl bg-[#12121a] border border-gray-800/60 shadow-lg">
           <h4 className="text-sm font-medium text-gray-500 uppercase tracking-wider mb-4">Recommendations</h4>
-          <ul className="space-y-3">
-            {data.recommendations.map((r: string, i: number) => (
-              <li key={i} className="text-blue-300 bg-blue-500/10 px-4 py-3 rounded-lg border border-blue-500/20 text-sm">{r}</li>
-            ))}
-          </ul>
+          {data.recommendations.length === 0 ? (
+            <p className="text-sm text-emerald-400 font-mono">System operating normally.</p>
+          ) : (
+            <ul className="space-y-3">
+              {data.recommendations.map((r: string, i: number) => (
+                <li key={i} className="text-blue-300 bg-blue-500/10 px-4 py-3 rounded-lg border border-blue-500/20 text-sm">{r}</li>
+              ))}
+            </ul>
+          )}
         </div>
       </div>
     </div>

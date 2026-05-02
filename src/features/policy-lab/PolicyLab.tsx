@@ -3,13 +3,24 @@ import { Play, ShieldAlert, CheckCircle2, Sparkles } from 'lucide-react';
 import { api } from '../../lib/api';
 import { DryRunResult } from '../../types';
 import { ConfirmModal } from '../../components/ui/ConfirmModal';
+import { useAuth } from '../../contexts/AuthContext';
 import Markdown from 'react-markdown';
 
+const POLICY_OPTIONS = [
+  { id: 'POL-102', label: 'POL-102: Data Egress Boundary' },
+  { id: 'POL-105', label: 'POL-105: Rate Limit Override' },
+];
+
 export function PolicyLab() {
+  const { isAdmin } = useAuth();
   const [isSimulating, setIsSimulating] = useState(false);
   const [result, setResult] = useState<DryRunResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
+  const [applySuccess, setApplySuccess] = useState<string | null>(null);
+
+  const [selectedPolicy, setSelectedPolicy] = useState(POLICY_OPTIONS[0].id);
+  const [selectedEnv, setSelectedEnv] = useState<'staging' | 'production'>('staging');
   
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysis, setAnalysis] = useState<any>(null);
@@ -20,8 +31,9 @@ export function PolicyLab() {
     setAnalysis(null);
     try {
       const data = await api.post<DryRunResult>('/policy/dryrun', {
-        policyId: 'POL-102',
-        parameters: { threshold: 0.8 }
+        policyId: selectedPolicy,
+        parameters: { threshold: 0.8 },
+        environment: selectedEnv,
       });
       setResult(data);
     } catch (err: any) {
@@ -36,7 +48,7 @@ export function PolicyLab() {
     setIsAnalyzing(true);
     try {
       const data = await api.post<any>('/policy/analyze', {
-        policyId: 'POL-102',
+        policyId: selectedPolicy,
         dryRunResult: result
       });
       setAnalysis(data);
@@ -47,10 +59,20 @@ export function PolicyLab() {
     }
   };
 
-  const applyPolicy = async () => {
+  const applyPolicy = async (confirmationCode: string) => {
     setIsConfirmOpen(false);
-    // In a real app, this would call a PUT/POST endpoint to mutate the policy
-    alert("Policy POL-102 applied to production successfully. Audit log generated.");
+    setError(null);
+    setApplySuccess(null);
+    try {
+      await api.post('/admin/policy/apply', {
+        policyId: selectedPolicy,
+        confirmationCode,
+        reason: `Operator applied ${selectedPolicy} to ${selectedEnv} via PolicyLab.`,
+      });
+      setApplySuccess(`Policy ${selectedPolicy} applied successfully. Audit log generated.`);
+    } catch (err: any) {
+      setError(err.message);
+    }
   };
 
   return (
@@ -66,16 +88,25 @@ export function PolicyLab() {
         <div className="grid grid-cols-2 gap-6 mb-6">
           <div className="space-y-2">
             <label className="text-xs font-mono text-gray-500 uppercase">Target Policy</label>
-            <select className="w-full bg-[#1a1a24] border border-gray-700/50 rounded-lg px-4 py-2.5 text-sm text-gray-200 focus:outline-none focus:border-blue-500/50">
-              <option>POL-102: Data Egress Boundary</option>
-              <option>POL-105: Rate Limit Override</option>
+            <select
+              value={selectedPolicy}
+              onChange={e => setSelectedPolicy(e.target.value)}
+              className="w-full bg-[#1a1a24] border border-gray-700/50 rounded-lg px-4 py-2.5 text-sm text-gray-200 focus:outline-none focus:border-blue-500/50"
+            >
+              {POLICY_OPTIONS.map(p => (
+                <option key={p.id} value={p.id}>{p.label}</option>
+              ))}
             </select>
           </div>
           <div className="space-y-2">
             <label className="text-xs font-mono text-gray-500 uppercase">Environment</label>
-            <select className="w-full bg-[#1a1a24] border border-gray-700/50 rounded-lg px-4 py-2.5 text-sm text-gray-200 focus:outline-none focus:border-blue-500/50">
-              <option>Staging (Shadow Mode)</option>
-              <option>Production (Dry Run)</option>
+            <select
+              value={selectedEnv}
+              onChange={e => setSelectedEnv(e.target.value as 'staging' | 'production')}
+              className="w-full bg-[#1a1a24] border border-gray-700/50 rounded-lg px-4 py-2.5 text-sm text-gray-200 focus:outline-none focus:border-blue-500/50"
+            >
+              <option value="staging">Staging (Shadow Mode)</option>
+              <option value="production">Production (Dry Run)</option>
             </select>
           </div>
         </div>
@@ -98,6 +129,13 @@ export function PolicyLab() {
         <div className="p-4 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm flex items-center gap-3">
           <ShieldAlert className="w-5 h-5" />
           {error}
+        </div>
+      )}
+
+      {applySuccess && (
+        <div className="p-4 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-sm flex items-center gap-3">
+          <CheckCircle2 className="w-5 h-5" />
+          {applySuccess}
         </div>
       )}
 
@@ -180,12 +218,14 @@ export function PolicyLab() {
               )}
               {analysis ? 'Analysis Complete' : 'Analyze Impact'}
             </button>
-            <button 
-              onClick={() => setIsConfirmOpen(true)}
-              className="px-6 py-2.5 bg-red-600/20 hover:bg-red-600/30 text-red-400 border border-red-500/30 text-sm font-medium rounded-lg transition-colors"
-            >
-              Apply to Production
-            </button>
+            {isAdmin && (
+              <button 
+                onClick={() => setIsConfirmOpen(true)}
+                className="px-6 py-2.5 bg-red-600/20 hover:bg-red-600/30 text-red-400 border border-red-500/30 text-sm font-medium rounded-lg transition-colors"
+              >
+                Apply to Production
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -193,8 +233,8 @@ export function PolicyLab() {
       <ConfirmModal 
         isOpen={isConfirmOpen}
         title="Confirm Policy Mutation"
-        description="You are about to apply POL-102 to the production environment. This will immediately affect data egress boundaries for all active tenants. This action will be recorded in the immutable audit log."
-        expectedConfirmationText="APPLY-POL-102"
+        description={`You are about to apply ${selectedPolicy} to the ${selectedEnv} environment. This action will be recorded in the immutable audit log.`}
+        expectedConfirmationText={`APPLY-${selectedPolicy}`}
         onConfirm={applyPolicy}
         onCancel={() => setIsConfirmOpen(false)}
       />

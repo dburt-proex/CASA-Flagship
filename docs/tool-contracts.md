@@ -1,8 +1,10 @@
 # CASA Tool Contracts Checklist
 
-This document outlines the end-to-end contracts for the Gemini tools used in the CASA Operator Chat.
+This document outlines the end-to-end contracts for the Gemini tools used in the CASA Operator Chat and AI endpoints.
 
-## 1. fetchDashboard
+## Gemini Function-Calling Tools (used in `/api/chat`)
+
+### 1. fetchDashboard
 - **Expected input schema:** `{}` (Empty object)
 - **Failure cases:** 
   - Backend API unreachable or times out
@@ -21,7 +23,7 @@ This document outlines the end-to-end contracts for the Gemini tools used in the
 - **Auth expectations:** Internal server-to-server call. The operator must be authenticated on the Node layer to invoke the chat endpoint.
 - **Safe fallback behavior:** Returns `{ "error": "Validation failed", "details": [...] }` or `{ "error": "Backend Bridge Error: ..." }` which the model consumes and reports to the user.
 
-## 2. fetchBoundaryStress
+### 2. fetchBoundaryStress
 - **Expected input schema:** `{}` (Empty object)
 - **Failure cases:** 
   - Backend API unreachable or times out
@@ -39,11 +41,11 @@ This document outlines the end-to-end contracts for the Gemini tools used in the
 - **Auth expectations:** Internal server-to-server call.
 - **Safe fallback behavior:** Returns `{ "error": "Validation failed", "details": [...] }` or `{ "error": "Backend Bridge Error: ..." }`.
 
-## 3. runPolicyDryRun
+### 3. runPolicyDryRun
 - **Expected input schema:** 
   ```json
   {
-    "policyId": "string (required)",
+    "policyId": "string (required, max 100 chars)",
     "environment": "enum('staging', 'production') (optional, defaults to 'staging')",
     "parameters": "object (optional)"
   }
@@ -66,11 +68,11 @@ This document outlines the end-to-end contracts for the Gemini tools used in the
 - **Auth expectations:** Internal server-to-server call.
 - **Safe fallback behavior:** Returns `{ "error": "Validation failed", "details": [...] }` or `{ "error": "Missing or invalid 'policyId' argument" }`.
 
-## 4. replayDecision
+### 4. replayDecision
 - **Expected input schema:** 
   ```json
   {
-    "decisionId": "string (required)"
+    "decisionId": "string (required, max 100 chars)"
   }
   ```
 - **Failure cases:** 
@@ -90,3 +92,55 @@ This document outlines the end-to-end contracts for the Gemini tools used in the
 - **Max payload size:** < 10KB
 - **Auth expectations:** Internal server-to-server call.
 - **Safe fallback behavior:** Returns `{ "error": "Validation failed", "details": [...] }` or `{ "error": "Missing or invalid 'decisionId' argument" }`.
+
+---
+
+## Direct AI Endpoints
+
+### 5. POST /api/explain
+- **Auth:** Bearer JWT required
+- **Input schema (Zod):**
+  ```json
+  {
+    "context": "string (max 500 chars, required)",
+    "data": "any (required)"
+  }
+  ```
+- **Failure cases:**
+  - Missing or oversized `context`
+  - `data` JSON serialization exceeds 10KB
+  - Gemini API key not configured or invalid
+  - Gemini API timeout (15s)
+- **Expected response:**
+  ```json
+  { "explanation": "string (Markdown formatted)" }
+  ```
+- **Model:** `gemini-2.5-flash`
+- **Safe fallback:** Returns HTTP 400 on schema validation failure; HTTP 500 with human-readable error message on AI failure.
+
+### 6. POST /api/policy/analyze
+- **Auth:** Bearer JWT required
+- **Input schema (Zod):**
+  ```json
+  {
+    "policyId": "string (max 100 chars, required)",
+    "dryRunResult": "object (required)"
+  }
+  ```
+- **Failure cases:**
+  - Missing or oversized `policyId`
+  - `dryRunResult` JSON serialization exceeds 20KB
+  - Gemini API key not configured or invalid
+  - Gemini API timeout (15s)
+  - Structured JSON response parse failure
+- **Expected response (structured JSON):**
+  ```json
+  {
+    "summary": "string",
+    "predictedReviewLoad": "string",
+    "outcomeComparison": "string",
+    "approvalBrief": "string (Markdown formatted)"
+  }
+  ```
+- **Model:** `gemini-2.5-pro`
+- **Safe fallback:** Returns HTTP 400 on schema validation failure; HTTP 500 with error message on AI or parse failure.

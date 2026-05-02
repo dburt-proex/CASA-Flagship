@@ -52,3 +52,13 @@ export const AdminApplyPolicySchema = z.object({
   confirmationCode: z.string().max(100),
   reason: z.string().max(1000),
 });
+
+export const ExplainRequestSchema = z.object({
+  context: z.string().max(500),
+  data: z.any(),
+});
+
+export const PolicyAnalyzeRequestSchema = z.object({
+  policyId: z.string().max(100),
+  dryRunResult: z.any(),
+});

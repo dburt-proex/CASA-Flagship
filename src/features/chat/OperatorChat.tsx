@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Terminal } from 'lucide-react';
+import Markdown from 'react-markdown';
 import { api } from '../../lib/api';
 import { ChatMessage } from '../../types';
 import { cn } from '../../lib/utils';
@@ -43,9 +44,15 @@ export function OperatorChat() {
                 "max-w-[80%] rounded-2xl px-5 py-3 text-sm leading-relaxed",
                 msg.role === 'user' 
                   ? "bg-blue-600/20 text-blue-100 border border-blue-500/30" 
-                  : "bg-gray-800/40 text-gray-300 border border-gray-700/50 font-mono"
+                  : "bg-gray-800/40 text-gray-300 border border-gray-700/50"
               )}>
-                {msg.text}
+                {msg.role === 'assistant' ? (
+                  <div className="prose prose-invert prose-sm max-w-none">
+                    <Markdown>{msg.text}</Markdown>
+                  </div>
+                ) : (
+                  msg.text
+                )}
               </div>
             </div>
           ))

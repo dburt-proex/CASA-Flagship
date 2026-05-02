@@ -1,234 +1,198 @@
-Here’s a clean README.md draft for dburt-proex/CASA-Flagship.
-
 # CASA-Flagship
 
-CASA-Flagship is the operator-facing control plane for CASA.
+CASA-Flagship is the operator-facing control plane for CASA — a governance-grade AI oversight system. It provides a full-stack web UI and server orchestration layer for governing autonomous AI agents.
 
-It provides a web UI and server orchestration layer for:
+---
 
-- system dashboard visibility
-- boundary stress analysis
-- policy dry-run simulation
-- decision replay
-- operator tooling and future admin workflows
+## Features
 
-This repository is the **frontend + server integration layer**. It connects to a separate backend service for governance data and simulation.
+| Module | Description |
+|---|---|
+| **System Dashboard** | Real-time governance metrics (active policies, decisions, alerts, system health) |
+| **Review Gate** | Human-in-the-loop approval for flagged AI decisions |
+| **Policy Lab** | Policy dry-run simulation + AI impact analysis |
+| **Boundary Stress** | Live boundary stress analysis and recommendations |
+| **Audit Ledger** | Decision replay and history |
+| **Operator Chat** | AI-powered governance assistant with live tool-calling |
+| **Ops Metrics** | Internal telemetry for tool calls, latency, and route error rates |
 
 ---
 
 ## Architecture
 
-### This repo: `dburt-proex/CASA-Flagship`
-Responsible for:
+```
+┌─────────────────────────────────────────┐
+│         CASA-Flagship (this repo)        │
+│  React UI  <->  Express Server           │
+│  (port 3000)   └── /api routes          │
+│                    └── backendBridge --> │---> Python Governance Engine
+│                    └── geminiService --> │---> Gemini AI API
+└─────────────────────────────────────────┘
+```
 
-- frontend UI
-- server-side orchestration
-- backend bridge/service calls
-- environment-based backend wiring
-- future auth, audit, and session integrations
+### Repos
 
-### Backend repo: `dburt-proex/python-fastapi-backend`
-Responsible for:
+| Repo | Role |
+|---|---|
+| `dburt-proex/CASA-Flagship` | Frontend + Express server (this repo) |
+| `dburt-proex/python-fastapi-backend` | Python Governance Engine (data + simulation) |
 
-- dashboard data
-- boundary stress data
-- policy dry-run responses
-- decision replay responses
-- backend compatibility routes used by CASA-Flagship
+---
 
-Live backend URL:
+## Environment Variables
+
+Create a `.env` file (or configure in your deployment platform). See `.env.example` for all variables.
+
+### Required
 
 ```env
-PYTHON_API_URL=https://dburt-proex-python-fastapi-backend.onrender.com
-Current Backend Contract
+# Primary governance API URL
+CASA_GOVERNANCE_API_URL=https://dburt-proex-python-fastapi-backend.onrender.com
 
-CASA-Flagship expects the backend to support these routes:
-
-GET /api/v1/dashboard
-GET /api/v1/boundary-stress
-POST /api/v1/policy/dryrun
-GET /api/v1/decision-replay/{decision_id}
-POST /api/v1/admin/policy/apply
-
-The FastAPI backend also exposes:
-
-GET /health
-GET /dashboard
-GET /stress
-GET /boundary-stress
-POST /policy/dryrun
-GET /replay/{decision_id}
-Environment Variables
-
-Create a local .env file or configure these in your deployment platform.
-
-Required
-PYTHON_API_URL=https://dburt-proex-python-fastapi-backend.onrender.com
-BACKEND_API_URL=https://dburt-proex-python-fastapi-backend.onrender.com
+# JWT signing secret — use a long random value in production
 JWT_SECRET=replace-with-a-long-random-secret
-Optional / future infrastructure
-REDIS_URL=redis://127.0.0.1:6379
 
-Notes:
+# Gemini AI API key
+GEMINI_API_KEY=your-gemini-api-key
+```
 
-PYTHON_API_URL is the primary backend URL for the FastAPI service.
-BACKEND_API_URL is included for compatibility with older/internal bridge code.
-JWT_SECRET should be a long random secret in real deployments.
-REDIS_URL is only valid if Redis is actually running there.
-Local Development
-1. Install dependencies
+### Optional
 
-Use your normal package manager for this repo.
+```env
+# Redis for persistent chat session storage (falls back to in-memory if not set)
+REDIS_URL=rediss://default:<password>@<host>:<port>
 
-Example:
+# Google Cloud credentials for Cloud Logging audit trail (uses ADC if not set)
+GOOGLE_APPLICATION_CREDENTIALS=/path/to/key.json
+```
 
+---
+
+## Local Development
+
+```bash
+# 1. Install dependencies
 npm install
 
-or
+# 2. Set environment variables
+cp .env.example .env
+# Edit .env and set GEMINI_API_KEY and JWT_SECRET
 
-pnpm install
-
-Use whichever one the repo is already configured for.
-
-2. Set environment variables
-
-Example local .env:
-
-PYTHON_API_URL=https://dburt-proex-python-fastapi-backend.onrender.com
-BACKEND_API_URL=https://dburt-proex-python-fastapi-backend.onrender.com
-JWT_SECRET=dev-secret-change-me
-REDIS_URL=redis://127.0.0.1:6379
-3. Start the app
-
-Example:
-
+# 3. Start the dev server (Vite + Express)
 npm run dev
 
-or
+# 4. Run tests
+npm test
+```
 
-pnpm dev
-4. Verify backend reachability
+The app runs at `http://localhost:3000`.
 
-Open these in the browser:
+---
 
-https://dburt-proex-python-fastapi-backend.onrender.com/health
-https://dburt-proex-python-fastapi-backend.onrender.com/api/v1/dashboard
-https://dburt-proex-python-fastapi-backend.onrender.com/api/v1/boundary-stress
+## Testing
 
-If those return JSON, the backend is live and reachable.
+```bash
+npm test          # Run all unit tests (Vitest)
+npx tsc --noEmit  # TypeScript type check
+```
 
-Deployment Notes
-CASA-Flagship
+Test coverage:
+- `tests/unit/backendBridge.normalization.test.ts` — 39 backend bridge normalization tests
+- `tests/unit/opsMetrics.test.ts` — ops metrics aggregation and rolling cap
+- `tests/unit/middleware.auth.test.ts` — auth and audit middleware (JWT, RBAC, fail-closed)
+- `tests/unit/geminiService.executeTool.test.ts` — tool dispatch, validation, and truncation
 
-Deploy this repo as the UI/server application.
+---
 
-Make sure the deployed runtime has:
+## API Routes
 
-PYTHON_API_URL=https://dburt-proex-python-fastapi-backend.onrender.com
-BACKEND_API_URL=https://dburt-proex-python-fastapi-backend.onrender.com
-JWT_SECRET=<real-secret>
-Python backend
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| `GET` | `/health` | None | Server health check |
+| `POST` | `/api/auth/dev-login` | None | Issue dev JWT (rate-limited) |
+| `GET` | `/api/dashboard` | None | Governance dashboard metrics |
+| `GET` | `/api/stress` | None | Boundary stress analysis |
+| `GET` | `/api/replay/:id` | None | Decision replay |
+| `POST` | `/api/policy/dryrun` | None | Policy dry-run simulation |
+| `POST` | `/api/chat` | Bearer JWT | Operator AI assistant |
+| `POST` | `/api/explain` | Bearer JWT | Explain data with AI |
+| `POST` | `/api/policy/analyze` | Bearer JWT | AI policy impact analysis |
+| `GET` | `/api/decisions/flagged` | Bearer JWT | Flagged decisions pending review |
+| `GET` | `/api/decisions/history` | Bearer JWT | Resolved decision history |
+| `POST` | `/api/decisions/:id/review` | Bearer JWT | Approve or halt a decision |
+| `GET` | `/api/ops/metrics` | Bearer JWT (admin) | Internal ops telemetry |
+| `POST` | `/api/admin/policy/apply` | Bearer JWT (admin + confirmation code) | Apply policy mutation |
 
-The FastAPI backend is deployed separately on Render.
+---
 
-Current live backend:
+## Backend Contract
 
-https://dburt-proex-python-fastapi-backend.onrender.com
+The Python Governance Engine must expose:
 
-If the backend repo uses the compatibility entrypoint, the Render start command should be:
+```
+GET  /dashboard
+GET  /boundary-stress
+POST /policy/dryrun
+GET  /decision-replay/{decision_id}
+GET  /health
+```
 
+Backend bridge URL: `https://dburt-proex-python-fastapi-backend.onrender.com`
+
+---
+
+## Deployment
+
+### CASA-Flagship
+
+Deploy as a Node.js service. Required runtime environment:
+
+```env
+CASA_GOVERNANCE_API_URL=https://dburt-proex-python-fastapi-backend.onrender.com
+JWT_SECRET=<production-secret>
+GEMINI_API_KEY=<api-key>
+NODE_ENV=production
+```
+
+Build for production:
+
+```bash
+npm run build
+node dist/server/server.js
+```
+
+### Python Backend (Render)
+
+Start command:
+
+```
 uvicorn main_v2:app --host 0.0.0.0 --port $PORT
-Primary Features
-Dashboard
+```
 
-Loads system metrics from the backend.
+---
 
-Expected fields:
+## Security
 
-activePolicies
-decisions24h
-boundaryAlerts
-systemStatus
-Boundary Stress
+- **Helmet**: Security headers on all responses
+- **JWT authentication**: All write and AI endpoints require a valid Bearer token
+- **RBAC**: Admin role required for `/ops/metrics` and `/admin/policy/apply`
+- **Rate limiting**: 100 req/15min globally, 10 req/15min on `/auth/dev-login`
+- **Confirmation codes**: Admin policy mutations require explicit `APPLY-<policyId>` confirmation
+- **Fail-closed audit**: Policy mutations are rejected if Cloud Logging write fails
+- **Input validation**: All API inputs validated with Zod schemas
+- **Session isolation**: Chat sessions are scoped to the authenticated user's JWT subject
 
-Loads stress analysis from the backend.
+---
 
-Expected fields:
+## Troubleshooting
 
-stressLevel
-criticalBoundaries
-recommendations
-Policy Dry-Run
+**Dashboard shows fetch error**
+- Check `CASA_GOVERNANCE_API_URL` is set correctly
+- Verify backend is reachable: `https://dburt-proex-python-fastapi-backend.onrender.com/health`
+- Restart the server after env var changes
 
-Sends a policy simulation request and renders the result.
+**Chat returns AI config error**
+- `GEMINI_API_KEY` is missing or invalid — configure it in the Secrets panel
 
-Expected response fields:
-
-status
-simulatedOutcome
-impactScore
-logs
-Decision Replay
-
-Fetches and renders a previous decision context.
-
-Expected response fields:
-
-decisionId
-timestamp
-originalOutcome
-policyApplied
-context
-Troubleshooting
-Dashboard shows fetch error
-
-Most likely causes:
-
-PYTHON_API_URL not set in the CASA-Flagship runtime
-app not restarted after env var changes
-backend route mismatch
-backend temporarily unavailable
-Backend URL is wrong
-
-Current backend URL should be:
-
-PYTHON_API_URL=https://dburt-proex-python-fastapi-backend.onrender.com
-Redis connection refused
-
-If REDIS_URL=redis://127.0.0.1:6379 is set, Redis must actually be running locally.
-
-Otherwise:
-
-use a real hosted Redis URL, or
-make Redis optional in development mode
-Render backend health check
-
-Use:
-
-/health
-Render backend start command
-
-Use:
-
-uvicorn main_v2:app --host 0.0.0.0 --port $PORT
-Recommended Near-Term Next Steps
-finish end-to-end route compatibility
-add durable audit logging
-add real auth / RBAC
-add Redis-backed shared session storage
-add request correlation IDs
-add full-stack integration tests
-Repositories
-Frontend/server: dburt-proex/CASA-Flagship
-Backend: dburt-proex/python-fastapi-backend
-Status
-
-Current status: active integration and stabilization between CASA-Flagship and the live FastAPI backend.
-
-
-Paste that into:
-
-**`dburt-proex/CASA-Flagship/README.md`**
-
-The only line I’d expect you may need to tweak afterward is the exact install/start command if the repo uses `pnpm` instead of `npm`.
-
+**Redis connection refused**
+- If `REDIS_URL` is not set or points to `localhost`, the system automatically falls back to in-memory session storage

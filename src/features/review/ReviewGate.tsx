@@ -1,12 +1,32 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../../lib/api';
-import { ShieldAlert, CheckCircle, XCircle, AlertTriangle } from 'lucide-react';
+import { ShieldAlert, CheckCircle, XCircle, AlertTriangle, X } from 'lucide-react';
 import { ExplainButton } from '../../components/ExplainButton';
+import { useAuth } from '../../contexts/AuthContext';
+
+function Toast({ message, onClose }: { message: string; onClose: () => void }) {
+  useEffect(() => {
+    const timer = setTimeout(onClose, 5000);
+    return () => clearTimeout(timer);
+  }, [onClose]);
+
+  return (
+    <div className="fixed bottom-6 right-6 z-50 flex items-center gap-3 px-5 py-3 bg-red-500/10 border border-red-500/30 text-red-400 rounded-xl shadow-2xl backdrop-blur-sm animate-in slide-in-from-bottom-4 duration-300">
+      <ShieldAlert className="w-4 h-4 flex-shrink-0" />
+      <span className="text-sm">{message}</span>
+      <button onClick={onClose} className="ml-2 text-red-400/60 hover:text-red-400">
+        <X className="w-4 h-4" />
+      </button>
+    </div>
+  );
+}
 
 export function ReviewGate() {
+  const { isAdmin } = useAuth();
   const [flagged, setFlagged] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [toast, setToast] = useState<string | null>(null);
 
   const fetchFlagged = async () => {
     setLoading(true);
@@ -29,7 +49,7 @@ export function ReviewGate() {
       await api.post(`/decisions/${id}/review`, { action });
       setFlagged(prev => prev.filter(d => d.id !== id));
     } catch (err: any) {
-      alert(`Failed to ${action}: ${err.message}`);
+      setToast(`Failed to ${action}: ${err.message}`);
     }
   };
 
@@ -38,6 +58,8 @@ export function ReviewGate() {
 
   return (
     <div className="max-w-5xl space-y-6">
+      {toast && <Toast message={toast} onClose={() => setToast(null)} />}
+
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-medium text-gray-100 flex items-center gap-2">
           <ShieldAlert className="w-5 h-5 text-amber-500" />
@@ -101,22 +123,28 @@ export function ReviewGate() {
                 <p className="text-sm text-gray-300">{decision.reason}</p>
               </div>
 
-              <div className="flex gap-3 justify-end pt-4 border-t border-gray-800/60">
-                <button
-                  onClick={() => handleReview(decision.id, 'HALT')}
-                  className="flex items-center gap-2 px-6 py-2.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 rounded-lg text-sm font-medium transition-colors"
-                >
-                  <XCircle className="w-4 h-4" />
-                  Halt Action
-                </button>
-                <button
-                  onClick={() => handleReview(decision.id, 'APPROVE')}
-                  className="flex items-center gap-2 px-6 py-2.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 rounded-lg text-sm font-medium transition-colors"
-                >
-                  <CheckCircle className="w-4 h-4" />
-                  Approve Action
-                </button>
-              </div>
+              {isAdmin ? (
+                <div className="flex gap-3 justify-end pt-4 border-t border-gray-800/60">
+                  <button
+                    onClick={() => handleReview(decision.id, 'HALT')}
+                    className="flex items-center gap-2 px-6 py-2.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 rounded-lg text-sm font-medium transition-colors"
+                  >
+                    <XCircle className="w-4 h-4" />
+                    Halt Action
+                  </button>
+                  <button
+                    onClick={() => handleReview(decision.id, 'APPROVE')}
+                    className="flex items-center gap-2 px-6 py-2.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 rounded-lg text-sm font-medium transition-colors"
+                  >
+                    <CheckCircle className="w-4 h-4" />
+                    Approve Action
+                  </button>
+                </div>
+              ) : (
+                <div className="pt-4 border-t border-gray-800/60 text-xs text-gray-500 font-mono text-right">
+                  Admin role required to action decisions.
+                </div>
+              )}
             </div>
           ))}
         </div>

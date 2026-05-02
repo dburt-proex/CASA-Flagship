@@ -6,7 +6,7 @@ interface ConfirmModalProps {
   title: string;
   description: string;
   expectedConfirmationText?: string;
-  onConfirm: () => void;
+  onConfirm: (confirmationCode: string) => void;
   onCancel: () => void;
 }
 
@@ -66,7 +66,7 @@ export function ConfirmModal({
           <button 
             onClick={() => {
               if (isMatch) {
-                onConfirm();
+                onConfirm(input);
                 setInput('');
               }
             }}

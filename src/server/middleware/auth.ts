@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { jwtVerify } from 'jose';
-
-const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'default-secret-do-not-use-in-prod');
+import { JWT_ENCODED_SECRET } from '../lib/jwtSecret.js';
+import type { AuthenticatedUser } from '../lib/authTypes.js';
 
 export async function authenticate(req: Request, res: Response, next: NextFunction) {
   const authHeader = req.headers.authorization;
@@ -12,9 +12,8 @@ export async function authenticate(req: Request, res: Response, next: NextFuncti
 
   const token = authHeader.split(' ')[1];
   try {
-    const { payload } = await jwtVerify(token, JWT_SECRET);
-    // Attach payload to request for downstream use
-    (req as any).user = payload;
+    const { payload } = await jwtVerify(token, JWT_ENCODED_SECRET);
+    req.user = payload as AuthenticatedUser;
     next();
   } catch (err: any) {
     if (err.name === 'JWTExpired' || err.code === 'ERR_JWT_EXPIRED') {
