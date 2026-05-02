@@ -4,6 +4,7 @@ import { createServer as createViteServer } from "vite";
 import path from "path";
 import crypto from "crypto";
 import helmet from "helmet";
+import rateLimit from "express-rate-limit";
 import { apiRouter } from "./src/server/routes/api.js";
 
 async function startServer() {
@@ -24,6 +25,14 @@ async function startServer() {
         fontSrc: ["'self'", "data:"],
       }
     }
+  }));
+
+  // Global rate limiter — covers all routes including static file serving
+  app.use(rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 500,
+    message: { error: "Too many requests, please try again later." },
+    validate: false,
   }));
 
   app.use(express.json({ limit: '1mb' }));
@@ -56,14 +65,8 @@ async function startServer() {
   app.use("/api", apiRouter);
 
   // Health check
-  app.get("/health", (req: Request, res: Response) => {
-    res.json({ 
-      status: "ok", 
-      service: "casa-control-plane-node",
-      config: {
-        geminiConfigured: !!process.env.GEMINI_API_KEY?.trim(),
-      }
-    });
+  app.get("/health", (_req: Request, res: Response) => {
+    res.json({ status: "ok", service: "casa-control-plane-node" });
   });
 
   // ============================================================================

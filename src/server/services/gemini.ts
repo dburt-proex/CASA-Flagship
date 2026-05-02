@@ -100,8 +100,8 @@ function handleGeminiError(error: any, context: string, requestId?: string): nev
     throw new Error("AI Service configuration error: Missing or invalid GEMINI_API_KEY or gemini-casa-api. Please configure it in the Settings menu.");
   }
 
-  console.error(`[Gemini Error] ${context} failed: ${errMsg} RequestID: ${requestId}`, error);
-  throw new Error(`An unexpected error occurred while communicating with the AI service: ${errMsg}`);
+  console.error('[Gemini Error] Service failure', { context, requestId, message: error.message || String(error) });
+  throw new Error(`An unexpected error occurred while communicating with the AI service. Please try again.`);
 }
 
 // ============================================================================

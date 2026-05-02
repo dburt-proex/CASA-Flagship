@@ -147,6 +147,6 @@ export const backendBridge = {
   },
 
   async applyPolicy(_policyId: string, _reason: string, _requestId?: string): Promise<{ success: boolean; auditId: string }> {
-    throw new Error('Canonical CASA governance API does not yet expose admin policy apply. Add this endpoint in casa-control-plane before enabling policy mutation from CASA-Flagship.');
+    throw new Error('NOT_IMPLEMENTED: The governance API does not yet expose an admin policy apply endpoint. Add this in the Python backend before enabling policy mutation from CASA-Flagship.');
   }
 };

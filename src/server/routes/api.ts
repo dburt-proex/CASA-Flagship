@@ -133,7 +133,10 @@ apiRouter.post('/chat', authenticate, async (req, res, next) => {
   try {
     const { message, sessionId = 'default-session' } = ChatRequestSchema.parse(req.body);
     // Scope session to the authenticated user to prevent cross-user session leakage.
-    const userScopedSessionId = `${req.user!.sub}:${sessionId}`;
+    if (!req.user?.sub) {
+      return res.status(401).json({ error: 'Unauthorized', message: 'User subject missing from token' });
+    }
+    const userScopedSessionId = `${req.user.sub}:${sessionId}`;
     const reply = await geminiService.handleChat(userScopedSessionId, message, req.headers['x-request-id'] as string);
     res.json({ reply });
   } catch (error: any) {
@@ -230,9 +233,9 @@ apiRouter.post('/admin/policy/apply', requireAdminConfirmation, async (req, res,
     if (error.name === 'ZodError') {
       return res.status(400).json({ error: 'Invalid request schema', details: error.issues });
     }
-    // applyPolicy stub explicitly signals not-implemented
-    if (error.message?.includes('does not yet expose')) {
-      return res.status(501).json({ error: 'Not Implemented', message: error.message });
+    // applyPolicy stub explicitly signals not-implemented via a well-known sentinel message
+    if (error.message?.startsWith('NOT_IMPLEMENTED:')) {
+      return res.status(501).json({ error: 'Not Implemented', message: error.message.slice('NOT_IMPLEMENTED:'.length).trim() });
     }
     next(error);
   }
