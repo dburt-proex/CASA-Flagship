@@ -10,7 +10,8 @@
     "build:server": "tsc server.ts --outDir dist/server --esModuleInterop --skipLibCheck --module NodeNext --moduleResolution NodeNext",
     "preview": "vite preview",
     "clean": "rm -rf dist",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "test": "vitest run"
   },
   "dependencies": {
     "@google-cloud/logging": "^11.2.1",
@@ -39,6 +40,7 @@
     "tailwindcss": "^4.1.14",
     "tsx": "^4.21.0",
     "typescript": "~5.8.2",
-    "vite": "^6.2.0"
+    "vite": "^6.2.0",
+    "vitest": "^4.1.5"
   }
 }
