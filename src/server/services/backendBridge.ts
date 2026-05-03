@@ -18,6 +18,15 @@ console.log('[BACKEND BRIDGE] Initialized with canonical CASA Governance API:', 
 
 type JsonRecord = Record<string, any>;
 
+export type WorkflowEvaluationRequest = {
+  companyName?: string;
+  industry?: string;
+  workflowName?: string;
+  agent: string;
+  action: string;
+  signals: JsonRecord;
+};
+
 async function fetchWithTimeout(url: string, options: RequestInit = {}, timeoutMs = 10000) {
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), timeoutMs);
@@ -28,7 +37,7 @@ async function fetchWithTimeout(url: string, options: RequestInit = {}, timeoutM
     });
     
     const contentLength = response.headers.get('content-length');
-    if (contentLength && parseInt(contentLength, 10) > 5 * 1024 * 1024) { // 5MB limit
+    if (contentLength && parseInt(contentLength, 10) > 5 * 1024 * 1024) {
       throw new Error(`Backend Bridge Error: Response payload too large (${contentLength} bytes)`);
     }
 
@@ -37,7 +46,7 @@ async function fetchWithTimeout(url: string, options: RequestInit = {}, timeoutM
     }
     
     const text = await response.text();
-    if (text.length > 5 * 1024 * 1024) { // 5MB limit
+    if (text.length > 5 * 1024 * 1024) {
       throw new Error(`Backend Bridge Error: Response payload too large (${text.length} characters)`);
     }
     
@@ -112,6 +121,27 @@ function normalizeDecisionReplay(raw: JsonRecord, decisionId: string): z.infer<t
 }
 
 export const backendBridge = {
+  async evaluateAction(payload: WorkflowEvaluationRequest, requestId?: string): Promise<JsonRecord> {
+    const headers = {
+      'Content-Type': 'application/json',
+      ...(requestId ? { 'X-Request-ID': requestId } : {})
+    };
+    return fetchWithTimeout(`${BACKEND_API_URL}/evaluate`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        agent: payload.agent,
+        action: payload.action,
+        signals: {
+          ...payload.signals,
+          company_name: payload.companyName,
+          industry: payload.industry,
+          workflow_name: payload.workflowName
+        }
+      })
+    });
+  },
+
   async getDashboard(requestId?: string): Promise<z.infer<typeof DashboardSchema>> {
     const headers = requestId ? { 'X-Request-ID': requestId } : {};
     const data = await fetchWithTimeout(`${BACKEND_API_URL}/dashboard`, { headers });
