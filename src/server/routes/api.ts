@@ -14,37 +14,25 @@ import rateLimit from 'express-rate-limit';
 
 export const apiRouter = Router();
 
-// ============================================================================
-// Rate Limiting & Metrics
-// ============================================================================
 const apiLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // Limit each IP to 100 requests per windowMs
+  windowMs: 15 * 60 * 1000,
+  max: 100,
   message: { error: "Too many requests, please try again later." },
   validate: false
 });
 
 apiRouter.use(apiLimiter);
 
-// Middleware to track route metrics
 apiRouter.use((req, res, next) => {
   const route = req.path;
   opsMetrics.recordRouteRequest(route);
-  
   res.on('finish', () => {
-    if (res.statusCode >= 400) {
-      opsMetrics.recordRouteError(route);
-    }
+    if (res.statusCode >= 400) opsMetrics.recordRouteError(route);
   });
-  
   next();
 });
 
-// ============================================================================
-// Ops Metrics Route
-// ============================================================================
 apiRouter.get("/ops/metrics", (req, res) => {
-  // In a real app, this should be protected by admin auth
   res.json(opsMetrics.getMetrics());
 });
 
@@ -64,14 +52,10 @@ apiRouter.get('/debug-env', (req, res) => {
   });
 });
 
-// ============================================================================
-// Dev Auth Endpoint (Local Development Only)
-// ============================================================================
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'default-secret-do-not-use-in-prod');
 
 apiRouter.post('/auth/dev-login', async (req, res) => {
   const { role = 'operator', email = 'dev@casa.local' } = req.body;
-  
   try {
     const token = await new SignJWT({ role, email })
       .setProtectedHeader({ alg: 'HS256' })
@@ -79,16 +63,20 @@ apiRouter.post('/auth/dev-login', async (req, res) => {
       .setExpirationTime('7d')
       .setSubject(email)
       .sign(JWT_SECRET);
-      
     res.json({ token, user: { role, email } });
   } catch (error) {
     res.status(500).json({ error: 'Failed to generate dev token' });
   }
 });
 
-// ============================================================================
-// Read-Only Governance Endpoints
-// ============================================================================
+apiRouter.post('/evaluate', async (req, res) => {
+  try {
+    const result = await backendBridge.evaluateAction(req.body, req.headers['x-request-id'] as string);
+    res.json(result);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
 
 apiRouter.get('/dashboard', async (req, res) => {
   try {
@@ -117,10 +105,6 @@ apiRouter.get('/replay/:id', async (req, res) => {
   }
 });
 
-// ============================================================================
-// Simulation & AI Endpoints
-// ============================================================================
-
 apiRouter.post('/policy/dryrun', async (req, res) => {
   try {
     const payload = PolicyDryRunRequestSchema.parse(req.body);
@@ -145,10 +129,7 @@ apiRouter.post('/chat', authenticate, async (req, res) => {
 apiRouter.post('/explain', authenticate, async (req, res) => {
   try {
     const { context, data } = req.body;
-    if (!context || !data) {
-      return res.status(400).json({ error: 'Missing context or data' });
-    }
-    console.log('[API] Explain called. Key starts with:', process.env.GEMINI_CASA_API?.substring(0, 5));
+    if (!context || !data) return res.status(400).json({ error: 'Missing context or data' });
     const explanation = await geminiService.explainData(context, data);
     res.json({ explanation });
   } catch (error: any) {
@@ -160,9 +141,7 @@ apiRouter.post('/explain', authenticate, async (req, res) => {
 apiRouter.post('/policy/analyze', authenticate, async (req, res) => {
   try {
     const { policyId, dryRunResult } = req.body;
-    if (!policyId || !dryRunResult) {
-      return res.status(400).json({ error: 'Missing policyId or dryRunResult' });
-    }
+    if (!policyId || !dryRunResult) return res.status(400).json({ error: 'Missing policyId or dryRunResult' });
     const analysis = await geminiService.analyzePolicy(policyId, dryRunResult);
     res.json(analysis);
   } catch (error: any) {
@@ -170,10 +149,6 @@ apiRouter.post('/policy/analyze', authenticate, async (req, res) => {
     res.status(500).json({ error: 'Failed to analyze policy' });
   }
 });
-
-// ============================================================================
-// Mock Endpoints for 3-Gate System & Audit Ledger
-// ============================================================================
 
 const MOCK_DECISIONS = [
   { id: 'DEC-123', timestamp: '2026-04-10T14:30:00Z', agent: 'support_agent', action: 'write_database', status: 'REVIEW', liabilityGrade: 'HIGH', riskScore: 85, reason: 'Policy threshold changed after boundary stress increase.' },
@@ -183,33 +158,21 @@ const MOCK_DECISIONS = [
 ];
 
 apiRouter.get('/decisions/flagged', authenticate, (req, res) => {
-  const flagged = MOCK_DECISIONS.filter(d => d.status === 'REVIEW');
-  res.json(flagged);
+  res.json(MOCK_DECISIONS.filter(d => d.status === 'REVIEW'));
 });
 
 apiRouter.get('/decisions/history', authenticate, (req, res) => {
-  const history = MOCK_DECISIONS.filter(d => d.status !== 'REVIEW');
-  res.json(history);
+  res.json(MOCK_DECISIONS.filter(d => d.status !== 'REVIEW'));
 });
 
 apiRouter.post('/decisions/:id/review', authenticate, (req, res) => {
-  const { action } = req.body; // 'APPROVE' or 'HALT'
-  if (action !== 'APPROVE' && action !== 'HALT') {
-    return res.status(400).json({ error: 'Invalid action. Must be APPROVE or HALT.' });
-  }
-  
+  const { action } = req.body;
+  if (action !== 'APPROVE' && action !== 'HALT') return res.status(400).json({ error: 'Invalid action. Must be APPROVE or HALT.' });
   const decision = MOCK_DECISIONS.find(d => d.id === req.params.id);
-  if (!decision) {
-    return res.status(404).json({ error: 'Decision not found' });
-  }
-
+  if (!decision) return res.status(404).json({ error: 'Decision not found' });
   decision.status = action === 'APPROVE' ? 'ALLOW' : 'HALT';
   res.json({ success: true, decision });
 });
-
-// ============================================================================
-// Protected Admin Write Endpoints
-// ============================================================================
 
 apiRouter.post('/admin/policy/apply', requireAdminConfirmation, async (req, res) => {
   try {
