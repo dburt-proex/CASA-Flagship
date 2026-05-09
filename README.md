@@ -1,234 +1,293 @@
-Here’s a clean README.md draft for dburt-proex/CASA-Flagship.
-
 # CASA-Flagship
 
-CASA-Flagship is the operator-facing control plane for CASA.
+CASA-Flagship is the operator-facing console for CASA.
 
 It provides a web UI and server orchestration layer for:
 
-- system dashboard visibility
+- live workflow evaluation
+- ALLOW / REVIEW / HALT gate visibility
+- governance dashboard visibility
 - boundary stress analysis
 - policy dry-run simulation
 - decision replay
+- review queue workflows
 - operator tooling and future admin workflows
 
-This repository is the **frontend + server integration layer**. It connects to a separate backend service for governance data and simulation.
+This repository is the frontend and server integration layer. It connects only to the canonical CASA governance backend:
+
+```txt
+Backend: dburt-proex/casa-control-plane
+Branch: master
+Runtime: Python
+Start: uvicorn governance_api:app --host 0.0.0.0 --port $PORT
+Health: /health
+```
+
+Current build is intended for design partner evaluation and controlled prototype demonstration. Auth middleware is in active development. Not production-certified, enterprise-secure, or compliance-ready unless separately verified and documented.
 
 ---
 
 ## Architecture
 
 ### This repo: `dburt-proex/CASA-Flagship`
+
 Responsible for:
 
 - frontend UI
 - server-side orchestration
-- backend bridge/service calls
-- environment-based backend wiring
+- backend bridge calls
+- environment-based governance API wiring
+- operator-facing workflow intake
+- dashboard, replay, review, and policy surfaces
 - future auth, audit, and session integrations
 
-### Backend repo: `dburt-proex/python-fastapi-backend`
+### Backend repo: `dburt-proex/casa-control-plane`
+
 Responsible for:
 
-- dashboard data
-- boundary stress data
-- policy dry-run responses
-- decision replay responses
-- backend compatibility routes used by CASA-Flagship
+- deterministic governance evaluation
+- ALLOW / REVIEW / HALT routing
+- policy loading and dry-run simulation
+- audit ledger reads and writes
+- decision replay
+- boundary stress analysis
+- governance dashboard data
+- review queue endpoints
 
-Live backend URL:
+---
+
+## Required Backend Contract
+
+CASA-Flagship expects the CASA governance backend to expose:
+
+```txt
+GET  /health
+POST /evaluate
+GET  /ledger
+GET  /policy
+GET  /dashboard
+GET  /dashboard/text
+GET  /boundary-stress
+POST /policy/dryrun
+GET  /decision-replay/{decision_id}
+GET  /decisions/flagged
+POST /decisions/{decision_id}/review
+```
+
+The canonical backend repository already contains these routes in `governance_api.py`.
+
+---
+
+## Environment Variables
+
+Create a local `.env` file or configure these in your deployment platform.
+
+Required:
 
 ```env
-PYTHON_API_URL=https://dburt-proex-python-fastapi-backend.onrender.com
-Current Backend Contract
-
-CASA-Flagship expects the backend to support these routes:
-
-GET /api/v1/dashboard
-GET /api/v1/boundary-stress
-POST /api/v1/policy/dryrun
-GET /api/v1/decision-replay/{decision_id}
-POST /api/v1/admin/policy/apply
-
-The FastAPI backend also exposes:
-
-GET /health
-GET /dashboard
-GET /stress
-GET /boundary-stress
-POST /policy/dryrun
-GET /replay/{decision_id}
-Environment Variables
-
-Create a local .env file or configure these in your deployment platform.
-
-Required
-PYTHON_API_URL=https://dburt-proex-python-fastapi-backend.onrender.com
-BACKEND_API_URL=https://dburt-proex-python-fastapi-backend.onrender.com
+CASA_GOVERNANCE_API_URL=https://casa-control-plane.onrender.com
+BACKEND_API_URL=https://casa-control-plane.onrender.com
 JWT_SECRET=replace-with-a-long-random-secret
-Optional / future infrastructure
-REDIS_URL=redis://127.0.0.1:6379
+```
+
+Optional:
+
+```env
+GEMINI_API_KEY=
+GEMINI_CASA_API=
+REDIS_URL=
+```
 
 Notes:
 
-PYTHON_API_URL is the primary backend URL for the FastAPI service.
-BACKEND_API_URL is included for compatibility with older/internal bridge code.
-JWT_SECRET should be a long random secret in real deployments.
-REDIS_URL is only valid if Redis is actually running there.
-Local Development
-1. Install dependencies
+- `CASA_GOVERNANCE_API_URL` is the primary backend URL for the canonical CASA governance API.
+- `BACKEND_API_URL` is retained only as a compatibility fallback for existing bridge code.
+- `JWT_SECRET` should be a long random secret outside local development.
+- `REDIS_URL` is optional unless session storage is configured.
 
-Use your normal package manager for this repo.
+---
 
-Example:
+## Local Development
 
+1. Install dependencies:
+
+```bash
 npm install
+```
 
-or
+2. Configure `.env`:
 
-pnpm install
-
-Use whichever one the repo is already configured for.
-
-2. Set environment variables
-
-Example local .env:
-
-PYTHON_API_URL=https://dburt-proex-python-fastapi-backend.onrender.com
-BACKEND_API_URL=https://dburt-proex-python-fastapi-backend.onrender.com
+```env
+CASA_GOVERNANCE_API_URL=http://127.0.0.1:5000
+BACKEND_API_URL=http://127.0.0.1:5000
 JWT_SECRET=dev-secret-change-me
-REDIS_URL=redis://127.0.0.1:6379
-3. Start the app
+```
 
-Example:
+3. Run the CASA governance backend separately:
 
+```bash
+cd ../casa-control-plane
+pip install -r requirements.txt
+uvicorn governance_api:app --host 127.0.0.1 --port 5000
+```
+
+4. Start CASA-Flagship:
+
+```bash
 npm run dev
+```
 
-or
+5. Verify backend reachability:
 
-pnpm dev
-4. Verify backend reachability
+```bash
+curl http://127.0.0.1:5000/health
+curl http://127.0.0.1:5000/policy
+curl http://127.0.0.1:5000/ledger
+curl http://127.0.0.1:5000/dashboard
+```
 
-Open these in the browser:
+---
 
-https://dburt-proex-python-fastapi-backend.onrender.com/health
-https://dburt-proex-python-fastapi-backend.onrender.com/api/v1/dashboard
-https://dburt-proex-python-fastapi-backend.onrender.com/api/v1/boundary-stress
+## Deployment Notes
 
-If those return JSON, the backend is live and reachable.
+Deploy CASA-Flagship as the operator console.
 
-Deployment Notes
-CASA-Flagship
+Set these runtime variables:
 
-Deploy this repo as the UI/server application.
-
-Make sure the deployed runtime has:
-
-PYTHON_API_URL=https://dburt-proex-python-fastapi-backend.onrender.com
-BACKEND_API_URL=https://dburt-proex-python-fastapi-backend.onrender.com
+```env
+CASA_GOVERNANCE_API_URL=https://casa-control-plane.onrender.com
+BACKEND_API_URL=https://casa-control-plane.onrender.com
 JWT_SECRET=<real-secret>
-Python backend
+```
 
-The FastAPI backend is deployed separately on Render.
+Deploy `dburt-proex/casa-control-plane` separately with:
 
-Current live backend:
+```txt
+Repository: dburt-proex/casa-control-plane
+Branch: master
+Build Command: pip install -r requirements.txt
+Start Command: uvicorn governance_api:app --host 0.0.0.0 --port $PORT
+Health Check Path: /health
+```
 
-https://dburt-proex-python-fastapi-backend.onrender.com
+---
 
-If the backend repo uses the compatibility entrypoint, the Render start command should be:
+## Primary Features
 
-uvicorn main_v2:app --host 0.0.0.0 --port $PORT
-Primary Features
-Dashboard
+### Workflow Intake
 
-Loads system metrics from the backend.
+Submits a proposed AI workflow action to `/evaluate` and renders the CASA gate result.
 
-Expected fields:
+Expected result fields include:
 
+```txt
+agent
+action
+risk
+decision
+```
+
+### Dashboard
+
+Loads governance metrics from `/dashboard`.
+
+Expected normalized UI fields:
+
+```txt
 activePolicies
 decisions24h
 boundaryAlerts
 systemStatus
-Boundary Stress
+```
 
-Loads stress analysis from the backend.
+### Boundary Stress
 
-Expected fields:
+Loads policy boundary stress data from `/boundary-stress`.
 
+Expected normalized UI fields:
+
+```txt
 stressLevel
 criticalBoundaries
 recommendations
-Policy Dry-Run
+```
 
-Sends a policy simulation request and renders the result.
+### Policy Dry-Run
 
-Expected response fields:
+Sends a policy simulation request to `/policy/dryrun`.
 
+Expected normalized UI fields:
+
+```txt
 status
 simulatedOutcome
 impactScore
 logs
-Decision Replay
+```
 
-Fetches and renders a previous decision context.
+### Decision Replay
 
-Expected response fields:
+Fetches a previous decision context from `/decision-replay/{decision_id}`.
 
+Expected normalized UI fields:
+
+```txt
 decisionId
 timestamp
 originalOutcome
 policyApplied
 context
-Troubleshooting
-Dashboard shows fetch error
+```
 
-Most likely causes:
+---
 
-PYTHON_API_URL not set in the CASA-Flagship runtime
-app not restarted after env var changes
-backend route mismatch
-backend temporarily unavailable
-Backend URL is wrong
+## Troubleshooting
 
-Current backend URL should be:
+### Dashboard shows fetch error
 
-PYTHON_API_URL=https://dburt-proex-python-fastapi-backend.onrender.com
-Redis connection refused
+Likely causes:
 
-If REDIS_URL=redis://127.0.0.1:6379 is set, Redis must actually be running locally.
+- `CASA_GOVERNANCE_API_URL` is missing or wrong
+- deployed app was not restarted after env var changes
+- backend service is asleep or unavailable
+- route contract mismatch between Flagship and `casa-control-plane`
 
-Otherwise:
+### Backend URL is wrong
 
-use a real hosted Redis URL, or
-make Redis optional in development mode
-Render backend health check
+Current expected backend URL:
+
+```env
+CASA_GOVERNANCE_API_URL=https://casa-control-plane.onrender.com
+```
+
+### Render backend health check
 
 Use:
 
+```txt
 /health
-Render backend start command
+```
 
-Use:
+---
 
-uvicorn main_v2:app --host 0.0.0.0 --port $PORT
-Recommended Near-Term Next Steps
-finish end-to-end route compatibility
-add durable audit logging
-add real auth / RBAC
-add Redis-backed shared session storage
-add request correlation IDs
-add full-stack integration tests
-Repositories
-Frontend/server: dburt-proex/CASA-Flagship
-Backend: dburt-proex/python-fastapi-backend
-Status
+## Recommended Near-Term Next Steps
 
-Current status: active integration and stabilization between CASA-Flagship and the live FastAPI backend.
+- deploy or redeploy `dburt-proex/casa-control-plane`
+- set `CASA_GOVERNANCE_API_URL` in CASA-Flagship
+- run ALLOW / REVIEW / HALT verification through `/evaluate`
+- confirm each successful decision appears in `/ledger`
+- verify dashboard values are real backend data
+- keep claims bounded to controlled prototype and design partner evaluation
 
+---
 
-Paste that into:
+## Repositories
 
-**`dburt-proex/CASA-Flagship/README.md`**
+```txt
+Operator console: dburt-proex/CASA-Flagship
+Governance backend: dburt-proex/casa-control-plane
+```
 
-The only line I’d expect you may need to tweak afterward is the exact install/start command if the repo uses `pnpm` instead of `npm`.
+## Status
 
+Current status: active integration and stabilization between CASA-Flagship and the canonical CASA governance backend.
