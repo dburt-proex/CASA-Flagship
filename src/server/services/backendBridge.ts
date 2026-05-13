@@ -22,10 +22,26 @@ export type WorkflowEvaluationRequest = {
   companyName?: string;
   industry?: string;
   workflowName?: string;
+  toolsInvolved?: string;
+  dataTouched?: string;
   agent: string;
   action: string;
   signals: JsonRecord;
 };
+
+function normalizeEvaluation(raw: JsonRecord, payload: WorkflowEvaluationRequest): JsonRecord {
+  const decisionId = raw.decisionId || raw.decision_id || raw.id;
+  return {
+    ...raw,
+    agent: String(raw.agent || raw.agent_name || payload.agent || ''),
+    action: String(raw.action || raw.action_description || payload.action || ''),
+    risk: String(raw.risk || raw.risk_level || raw.risk_score || 'unknown'),
+    decision: String(raw.decision || raw.gate || raw.route || raw.outcome || 'REVIEW'),
+    rationale: raw.rationale || raw.reason || raw.explanation || undefined,
+    policyVersion: raw.policyVersion || raw.policy_version || raw.current_policy_version || undefined,
+    decisionId: decisionId ? String(decisionId) : undefined
+  };
+}
 
 async function fetchWithTimeout(url: string, options: RequestInit = {}, timeoutMs = 10000) {
   const controller = new AbortController();
@@ -126,7 +142,7 @@ export const backendBridge = {
       'Content-Type': 'application/json',
       ...(requestId ? { 'X-Request-ID': requestId } : {})
     };
-    return fetchWithTimeout(`${BACKEND_API_URL}/evaluate`, {
+    const data = await fetchWithTimeout(`${BACKEND_API_URL}/evaluate`, {
       method: 'POST',
       headers,
       body: JSON.stringify({
@@ -136,10 +152,13 @@ export const backendBridge = {
           ...payload.signals,
           company_name: payload.companyName,
           industry: payload.industry,
-          workflow_name: payload.workflowName
+          workflow_name: payload.workflowName,
+          tools_involved: payload.toolsInvolved,
+          data_touched: payload.dataTouched
         }
       })
     });
+    return normalizeEvaluation(data, payload);
   },
 
   async getDashboard(requestId?: string): Promise<z.infer<typeof DashboardSchema>> {

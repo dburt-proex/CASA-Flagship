@@ -8,12 +8,17 @@ type EvaluationResult = {
   action: string;
   risk: string;
   decision: 'ALLOW' | 'REVIEW' | 'HALT' | string;
+  rationale?: string;
+  policyVersion?: string;
+  decisionId?: string;
 };
 
 type FormState = {
   companyName: string;
   industry: string;
   workflowName: string;
+  toolsInvolved: string;
+  dataTouched: string;
   agent: string;
   action: string;
   dataExposure: 'public' | 'internal' | 'private' | 'sensitive';
@@ -26,6 +31,8 @@ const initialForm: FormState = {
   companyName: 'Acme Operations',
   industry: 'Field Services',
   workflowName: 'Customer Communication Automation',
+  toolsInvolved: 'CRM, ticketing, email platform',
+  dataTouched: 'customer contact details, support ticket notes',
   agent: 'demo-agent',
   action: 'send customer-facing email',
   dataExposure: 'internal',
@@ -62,6 +69,7 @@ function decisionIcon(decision?: string) {
 export function WorkflowIntake() {
   const [form, setForm] = useState<FormState>(initialForm);
   const [result, setResult] = useState<EvaluationResult | null>(null);
+  const [dashboardImpact, setDashboardImpact] = useState<{ decisions24h: number; boundaryAlerts: number; systemStatus: string } | null>(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -75,11 +83,14 @@ export function WorkflowIntake() {
     setLoading(true);
     setError('');
     setResult(null);
+    setDashboardImpact(null);
     try {
       const response = await api.post<EvaluationResult>('/evaluate', {
         companyName: form.companyName,
         industry: form.industry,
         workflowName: form.workflowName,
+        toolsInvolved: form.toolsInvolved,
+        dataTouched: form.dataTouched,
         agent: form.agent,
         action: form.action,
         signals: {
@@ -91,6 +102,12 @@ export function WorkflowIntake() {
         }
       });
       setResult(response);
+      try {
+        const dashboard = await api.get<{ decisions24h: number; boundaryAlerts: number; systemStatus: string }>('/dashboard');
+        setDashboardImpact(dashboard);
+      } catch {
+        setDashboardImpact(null);
+      }
     } catch (e: any) {
       setError(e.message || 'Evaluation failed');
     } finally {
@@ -126,6 +143,14 @@ export function WorkflowIntake() {
             <label className="space-y-2 text-sm">
               <span className="text-gray-400">Workflow</span>
               <input className="w-full bg-[#0a0a0c] border border-gray-800 rounded-lg px-3 py-2 text-gray-100" value={form.workflowName} onChange={(e) => update('workflowName', e.target.value)} />
+            </label>
+            <label className="space-y-2 text-sm">
+              <span className="text-gray-400">Tools Involved</span>
+              <input className="w-full bg-[#0a0a0c] border border-gray-800 rounded-lg px-3 py-2 text-gray-100" value={form.toolsInvolved} onChange={(e) => update('toolsInvolved', e.target.value)} />
+            </label>
+            <label className="space-y-2 text-sm md:col-span-2">
+              <span className="text-gray-400">Data Touched</span>
+              <input className="w-full bg-[#0a0a0c] border border-gray-800 rounded-lg px-3 py-2 text-gray-100" value={form.dataTouched} onChange={(e) => update('dataTouched', e.target.value)} />
             </label>
             <label className="space-y-2 text-sm">
               <span className="text-gray-400">Agent Name</span>
@@ -189,8 +214,11 @@ export function WorkflowIntake() {
                 <div className="grid grid-cols-2 gap-3 text-xs font-mono text-gray-200">
                   <div><span className="text-gray-500">Risk</span><br />{result.risk}</div>
                   <div><span className="text-gray-500">Agent</span><br />{result.agent}</div>
+                  {result.policyVersion && <div><span className="text-gray-500">Policy Version</span><br />{result.policyVersion}</div>}
+                  {result.decisionId && <div><span className="text-gray-500">Decision ID</span><br />{result.decisionId}</div>}
                 </div>
                 <div className="text-xs text-gray-300 border-t border-white/10 pt-3">{result.action}</div>
+                {result.rationale && <div className="text-xs text-gray-300 border-t border-white/10 pt-3">Rationale: {result.rationale}</div>}
               </div>
             )}
           </div>
@@ -200,12 +228,23 @@ export function WorkflowIntake() {
             <div className="text-xs text-gray-400 space-y-2">
               <div>Company: <span className="text-gray-200">{form.companyName}</span></div>
               <div>Workflow: <span className="text-gray-200">{form.workflowName}</span></div>
+              <div>Tools: <span className="text-gray-200">{form.toolsInvolved}</span></div>
+              <div>Data touched: <span className="text-gray-200">{form.dataTouched}</span></div>
               <div>Policy route: <span className="text-gray-200">pre-execution gate</span></div>
-              <div>Ledger: <span className="text-gray-200">open Audit Ledger after evaluation</span></div>
+              <div>Decision id: <span className="text-gray-200">{result?.decisionId || 'pending evaluation'}</span></div>
+              {dashboardImpact && (
+                <div>Dashboard impact: <span className="text-gray-200">{dashboardImpact.decisions24h} decisions / {dashboardImpact.boundaryAlerts} alerts / {dashboardImpact.systemStatus}</span></div>
+              )}
             </div>
-            <a href="/" className="inline-flex items-center gap-2 text-xs text-blue-300 hover:text-blue-200">
-              Refresh dashboard after evaluation <ExternalLink className="w-3 h-3" />
-            </a>
+            {result?.decisionId ? (
+              <a href={`/api/replay/${encodeURIComponent(result.decisionId)}`} className="inline-flex items-center gap-2 text-xs text-blue-300 hover:text-blue-200">
+                Open ledger evidence payload <ExternalLink className="w-3 h-3" />
+              </a>
+            ) : (
+              <a href="/" className="inline-flex items-center gap-2 text-xs text-blue-300 hover:text-blue-200">
+                Refresh dashboard after evaluation <ExternalLink className="w-3 h-3" />
+              </a>
+            )}
           </div>
 
           <div className="p-6 rounded-xl bg-blue-500/10 border border-blue-500/20 shadow-lg space-y-3">

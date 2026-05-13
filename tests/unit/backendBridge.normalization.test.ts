@@ -326,3 +326,64 @@ describe('normalizeDecisionReplay', () => {
     expect(result.context).toHaveProperty('timestamp', '2025-01-01T00:00:00Z');
   });
 });
+
+// ---------------------------------------------------------------------------
+// 6. normalizeEvaluation + evaluateAction payload wiring
+// ---------------------------------------------------------------------------
+
+describe('normalizeEvaluation', () => {
+  it('maps evaluate aliases into stable fields', async () => {
+    mockFetch({
+      gate: 'HALT',
+      risk_level: 'high',
+      reason: 'contains irreversible customer-impacting write',
+      policy_version: 'POL-2026.05',
+      decision_id: 'DEC-999',
+    });
+
+    const result = await backendBridge.evaluateAction({
+      companyName: 'Acme',
+      industry: 'Retail',
+      workflowName: 'Refund workflow',
+      agent: 'agent-x',
+      action: 'issue refunds automatically',
+      signals: { confidence: 0.7 },
+    });
+
+    expect(result.decision).toBe('HALT');
+    expect(result.risk).toBe('high');
+    expect(result.rationale).toBe('contains irreversible customer-impacting write');
+    expect(result.policyVersion).toBe('POL-2026.05');
+    expect(result.decisionId).toBe('DEC-999');
+    expect(result.agent).toBe('agent-x');
+    expect(result.action).toBe('issue refunds automatically');
+  });
+
+  it('sends company/workflow/tools/data fields in evaluate signals payload', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      headers: { get: () => null },
+      text: async () => JSON.stringify({ decision: 'ALLOW', risk: 'low' }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await backendBridge.evaluateAction({
+      companyName: 'Acme',
+      industry: 'Retail',
+      workflowName: 'Support workflow',
+      toolsInvolved: 'CRM, Email',
+      dataTouched: 'contact info',
+      agent: 'agent-x',
+      action: 'draft response',
+      signals: { confidence: 0.85 },
+    });
+
+    const [, request] = fetchMock.mock.calls[0];
+    const body = JSON.parse(String(request.body));
+    expect(body.signals.company_name).toBe('Acme');
+    expect(body.signals.industry).toBe('Retail');
+    expect(body.signals.workflow_name).toBe('Support workflow');
+    expect(body.signals.tools_involved).toBe('CRM, Email');
+    expect(body.signals.data_touched).toBe('contact info');
+  });
+});
