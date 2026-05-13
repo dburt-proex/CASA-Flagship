@@ -32,9 +32,8 @@ export type WorkflowEvaluationRequest = {
 function normalizeEvaluation(raw: JsonRecord, payload: WorkflowEvaluationRequest): JsonRecord {
   const decisionId = raw.decisionId || raw.decision_id || raw.id;
   return {
-    ...raw,
-    agent: String(raw.agent || raw.agent_name || payload.agent || ''),
-    action: String(raw.action || raw.action_description || payload.action || ''),
+    agent: String(raw.agent || raw.agent_name || payload.agent || 'unknown-agent'),
+    action: String(raw.action || raw.action_description || payload.action || 'unknown-action'),
     risk: String(raw.risk || raw.risk_level || raw.risk_score || 'unknown'),
     decision: String(raw.decision || raw.gate || raw.route || raw.outcome || 'REVIEW'),
     rationale: raw.rationale || raw.reason || raw.explanation || undefined,

@@ -13,6 +13,12 @@ type EvaluationResult = {
   decisionId?: string;
 };
 
+type DashboardImpact = {
+  decisions24h: number;
+  boundaryAlerts: number;
+  systemStatus: string;
+};
+
 type FormState = {
   companyName: string;
   industry: string;
@@ -66,10 +72,16 @@ function decisionIcon(decision?: string) {
   return <ClipboardList className="w-6 h-6" />;
 }
 
+function getErrorMessage(error: unknown, fallback: string) {
+  if (error instanceof Error) return error.message;
+  return fallback;
+}
+
 export function WorkflowIntake() {
   const [form, setForm] = useState<FormState>(initialForm);
   const [result, setResult] = useState<EvaluationResult | null>(null);
-  const [dashboardImpact, setDashboardImpact] = useState<{ decisions24h: number; boundaryAlerts: number; systemStatus: string } | null>(null);
+  const [dashboardImpact, setDashboardImpact] = useState<DashboardImpact | null>(null);
+  const [dashboardImpactError, setDashboardImpactError] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -84,6 +96,7 @@ export function WorkflowIntake() {
     setError('');
     setResult(null);
     setDashboardImpact(null);
+    setDashboardImpactError('');
     try {
       const response = await api.post<EvaluationResult>('/evaluate', {
         companyName: form.companyName,
@@ -103,13 +116,14 @@ export function WorkflowIntake() {
       });
       setResult(response);
       try {
-        const dashboard = await api.get<{ decisions24h: number; boundaryAlerts: number; systemStatus: string }>('/dashboard');
+        const dashboard = await api.get<DashboardImpact>('/dashboard');
         setDashboardImpact(dashboard);
-      } catch {
+      } catch (dashboardError: unknown) {
         setDashboardImpact(null);
+        setDashboardImpactError(getErrorMessage(dashboardError, 'Dashboard impact unavailable'));
       }
-    } catch (e: any) {
-      setError(e.message || 'Evaluation failed');
+    } catch (e: unknown) {
+      setError(getErrorMessage(e, 'Evaluation failed'));
     } finally {
       setLoading(false);
     }
@@ -231,13 +245,14 @@ export function WorkflowIntake() {
               <div>Tools: <span className="text-gray-200">{form.toolsInvolved}</span></div>
               <div>Data touched: <span className="text-gray-200">{form.dataTouched}</span></div>
               <div>Policy route: <span className="text-gray-200">pre-execution gate</span></div>
-              <div>Decision id: <span className="text-gray-200">{result?.decisionId || 'pending evaluation'}</span></div>
+              <div>Decision ID: <span className="text-gray-200">{result?.decisionId || 'pending evaluation'}</span></div>
               {dashboardImpact && (
                 <div>Dashboard impact: <span className="text-gray-200">{dashboardImpact.decisions24h} decisions / {dashboardImpact.boundaryAlerts} alerts / {dashboardImpact.systemStatus}</span></div>
               )}
+              {dashboardImpactError && <div>Dashboard impact: <span className="text-amber-300">{dashboardImpactError}</span></div>}
             </div>
             {result?.decisionId ? (
-              <a href={`/api/replay/${encodeURIComponent(result.decisionId)}`} className="inline-flex items-center gap-2 text-xs text-blue-300 hover:text-blue-200">
+              <a href={`/api/replay/${encodeURIComponent(result.decisionId)}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 text-xs text-blue-300 hover:text-blue-200">
                 Open ledger evidence payload <ExternalLink className="w-3 h-3" />
               </a>
             ) : (
