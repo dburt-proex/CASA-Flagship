@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router, type RequestHandler } from 'express';
 import { SignJWT } from 'jose';
 import { backendBridge } from '../services/backendBridge.js';
 import { geminiService } from '../services/gemini.js';
@@ -36,18 +36,23 @@ apiRouter.use((req, res, next) => {
   next();
 });
 
+const requireDebugRoutesEnabled: RequestHandler = (_req, res, next) => {
+  if (!DEBUG_ROUTES_ENABLED) return res.status(404).json({ error: 'Not found' });
+  next();
+};
+
 apiRouter.get("/ops/metrics", (req, res) => {
   res.json(opsMetrics.getMetrics());
 });
 
-apiRouter.get('/debug-env', authenticate, (req, res) => {
-  if (!DEBUG_ROUTES_ENABLED) return res.status(404).json({ error: 'Not found' });
+apiRouter.get('/debug-env', requireDebugRoutesEnabled, authenticate, (req, res) => {
   const user = (req as any).user;
   if (user?.role !== 'admin') {
     return res.status(403).json({ error: 'Forbidden', message: 'Admin authentication required' });
   }
-  const keyCount = Object.keys(process.env).length;
-  const sensitiveKeyCount = Object.keys(process.env).filter((key) => /key|secret|token|password/i.test(key)).length;
+  const envKeys = Object.keys(process.env);
+  const keyCount = envKeys.length;
+  const sensitiveKeyCount = envKeys.filter((key) => /key|secret|token|password/i.test(key)).length;
   res.json({
     nodeEnv: process.env.NODE_ENV,
     keyCount,
@@ -59,7 +64,7 @@ apiRouter.get('/debug-env', authenticate, (req, res) => {
 
 apiRouter.post('/auth/dev-login', async (req, res) => {
   if (!DEV_LOGIN_ENABLED) {
-    return res.status(404).json({ error: 'Not found' });
+    return res.status(403).json({ error: 'Forbidden', message: 'Dev login is disabled' });
   }
   const { role = 'operator', email = 'dev@casa.local' } = req.body;
   try {
