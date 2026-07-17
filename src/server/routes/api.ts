@@ -12,15 +12,11 @@ import {
 import { ZodError } from 'zod';
 import { opsMetrics } from '../services/opsMetrics.js';
 import rateLimit from 'express-rate-limit';
+import { getJwtSecret, DEV_LOGIN_ENABLED, DEBUG_ROUTES_ENABLED } from '../config/security.js';
+import { PolicyApplyNotImplementedError } from '../services/backendBridge.js';
 
 export const apiRouter = Router();
-const DEFAULT_JWT_SECRET = 'default-secret-do-not-use-in-prod';
-const configuredJwtSecret = process.env.JWT_SECRET?.trim();
-if (process.env.NODE_ENV === 'production' && (!configuredJwtSecret || configuredJwtSecret === DEFAULT_JWT_SECRET)) {
-  throw new Error('JWT_SECRET must be set to a non-default value in production');
-}
-const JWT_SECRET = new TextEncoder().encode(configuredJwtSecret || DEFAULT_JWT_SECRET);
-const DEV_LOGIN_ENABLED = process.env.NODE_ENV !== 'production' && process.env.ENABLE_DEV_LOGIN === 'true';
+const JWT_SECRET = getJwtSecret();
 
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -45,7 +41,7 @@ apiRouter.get("/ops/metrics", (req, res) => {
 });
 
 apiRouter.get('/debug-env', authenticate, (req, res) => {
-  if (process.env.NODE_ENV === 'production') return res.status(404).json({ error: 'Not found' });
+  if (!DEBUG_ROUTES_ENABLED) return res.status(404).json({ error: 'Not found' });
   const user = (req as any).user;
   if (user?.role !== 'admin') {
     return res.status(403).json({ error: 'Forbidden', message: 'Admin authentication required' });
@@ -193,7 +189,7 @@ apiRouter.post('/admin/policy/apply', requireAdminConfirmation, async (req, res)
     if (error instanceof ZodError) {
       return res.status(400).json({ error: 'Invalid request schema', details: error.flatten() });
     }
-    if (error?.message?.includes('does not yet expose admin policy apply')) {
+    if (error instanceof PolicyApplyNotImplementedError) {
       return res.status(501).json({ error: 'Not Implemented', message: error.message });
     }
     return res.status(500).json({ error: 'Failed to apply policy', message: error?.message || 'Unknown error' });

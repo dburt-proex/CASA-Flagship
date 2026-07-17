@@ -18,6 +18,13 @@ console.log('[BACKEND BRIDGE] Initialized with canonical CASA Governance API:', 
 
 type JsonRecord = Record<string, any>;
 
+export class PolicyApplyNotImplementedError extends Error {
+  constructor() {
+    super('Canonical CASA governance API does not yet expose admin policy apply. Add this endpoint in casa-control-plane before enabling policy mutation from CASA-Flagship.');
+    this.name = 'PolicyApplyNotImplementedError';
+  }
+}
+
 export type WorkflowEvaluationRequest = {
   companyName?: string;
   industry?: string;
@@ -195,6 +202,6 @@ export const backendBridge = {
   },
 
   async applyPolicy(_policyId: string, _reason: string, _requestId?: string): Promise<{ success: boolean; auditId: string }> {
-    throw new Error('Canonical CASA governance API does not yet expose admin policy apply. Add this endpoint in casa-control-plane before enabling policy mutation from CASA-Flagship.');
+    throw new PolicyApplyNotImplementedError();
   }
 };
