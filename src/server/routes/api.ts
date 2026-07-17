@@ -39,8 +39,10 @@ apiRouter.use((req, res, next) => {
 type AuthenticatedRequest = Request & { user?: { role?: string } };
 
 const ensureDebugRoutesEnabled: RequestHandler = (_req, res, next) => {
-  if (!DEBUG_ROUTES_ENABLED) return res.status(404).json({ error: 'Not found' });
-  next();
+  if (!DEBUG_ROUTES_ENABLED) {
+    return res.status(404).json({ error: 'Not found' });
+  }
+  return next();
 };
 
 apiRouter.get("/ops/metrics", (req, res) => {
@@ -49,16 +51,11 @@ apiRouter.get("/ops/metrics", (req, res) => {
 
 apiRouter.get('/debug-env', ensureDebugRoutesEnabled, authenticate, (req, res) => {
   const user = (req as AuthenticatedRequest).user;
-  if (user?.role !== 'admin') {
+  if (!user || user.role !== 'admin') {
     return res.status(403).json({ error: 'Forbidden', message: 'Admin authentication required' });
   }
-  const envKeys = Object.keys(process.env);
-  const keyCount = envKeys.length;
-  const sensitiveKeyCount = envKeys.filter((key) => /key|secret|token|password/i.test(key)).length;
   res.json({
     nodeEnv: process.env.NODE_ENV,
-    keyCount,
-    sensitiveKeyCount,
     hasGeminiApiKey: Boolean(process.env.GEMINI_API_KEY?.trim()),
     hasCasaGeminiApiKey: Boolean(process.env['gemini-casa-api']?.trim() || process.env.GEMINI_CASA_API?.trim())
   });
