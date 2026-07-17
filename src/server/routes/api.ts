@@ -52,7 +52,11 @@ apiRouter.post('/auth/dev-login', async (req, res) => {
     return res.status(404).json({ error: 'Not found' });
   }
 
-  const requestedRole = req.body?.role;
+  const requestBody =
+    req.body && typeof req.body === 'object'
+      ? (req.body as { role?: unknown })
+      : {};
+  const requestedRole = requestBody.role;
   if (
     requestedRole !== undefined &&
     requestedRole !== 'operator' &&
@@ -62,8 +66,13 @@ apiRouter.post('/auth/dev-login', async (req, res) => {
   }
 
   const allowDevAdminLogin = process.env.ALLOW_DEV_ADMIN_LOGIN === 'true';
-  const role = allowDevAdminLogin && requestedRole === 'admin' ? 'admin' : 'operator';
-  const email = role === 'admin' ? 'dev-admin@casa.local' : 'dev-operator@casa.local';
+  const role: 'admin' | 'operator' =
+    allowDevAdminLogin && requestedRole === 'admin' ? 'admin' : 'operator';
+  const emailByRole: Record<'admin' | 'operator', string> = {
+    admin: 'dev-admin@casa.local',
+    operator: 'dev-operator@casa.local',
+  };
+  const email = emailByRole[role];
 
   try {
     const token = await new SignJWT({ role, email })
