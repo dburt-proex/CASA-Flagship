@@ -4,8 +4,8 @@ if (!rawJwtSecret) {
   throw new Error('JWT_SECRET must be configured');
 }
 
-if (process.env.NODE_ENV === 'production' && rawJwtSecret.length < 32) {
-  throw new Error('JWT_SECRET must be at least 32 characters in production');
+if (rawJwtSecret.length < 32) {
+  throw new Error('JWT_SECRET must be at least 32 characters');
 }
 
 export const JWT_SECRET = new TextEncoder().encode(rawJwtSecret);
