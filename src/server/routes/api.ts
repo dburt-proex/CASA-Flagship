@@ -56,7 +56,8 @@ apiRouter.post('/auth/dev-login', async (req, res) => {
     return res.status(404).json({ error: 'Not found' });
   }
 
-  const role = req.body?.role === 'admin' ? 'admin' : 'operator';
+  const allowDevAdminLogin = process.env.ALLOW_DEV_ADMIN_LOGIN === 'true';
+  const role = allowDevAdminLogin && req.body?.role === 'admin' ? 'admin' : 'operator';
   const email = role === 'admin' ? 'dev-admin@casa.local' : 'dev-operator@casa.local';
 
   try {
