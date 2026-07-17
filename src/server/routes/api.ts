@@ -9,10 +9,18 @@ import {
   PolicyDryRunRequestSchema, 
   AdminApplyPolicySchema 
 } from '../schemas/contracts.js';
+import { ZodError } from 'zod';
 import { opsMetrics } from '../services/opsMetrics.js';
 import rateLimit from 'express-rate-limit';
 
 export const apiRouter = Router();
+const DEFAULT_JWT_SECRET = 'default-secret-do-not-use-in-prod';
+const configuredJwtSecret = process.env.JWT_SECRET?.trim();
+if (process.env.NODE_ENV === 'production' && (!configuredJwtSecret || configuredJwtSecret === DEFAULT_JWT_SECRET)) {
+  throw new Error('JWT_SECRET must be set to a non-default value in production');
+}
+const JWT_SECRET = new TextEncoder().encode(configuredJwtSecret || DEFAULT_JWT_SECRET);
+const DEV_LOGIN_ENABLED = process.env.NODE_ENV !== 'production' && process.env.ENABLE_DEV_LOGIN === 'true';
 
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -36,25 +44,27 @@ apiRouter.get("/ops/metrics", (req, res) => {
   res.json(opsMetrics.getMetrics());
 });
 
-apiRouter.get('/debug-env', (req, res) => {
-  const aizaKeys: Record<string, string> = {};
-  for (const key in process.env) {
-    if (process.env[key]?.startsWith('AIza')) {
-      aizaKeys[key] = process.env[key]!.substring(0, 10) + '...';
-    }
+apiRouter.get('/debug-env', authenticate, (req, res) => {
+  if (process.env.NODE_ENV === 'production') return res.status(404).json({ error: 'Not found' });
+  const user = (req as any).user;
+  if (user?.role !== 'admin') {
+    return res.status(403).json({ error: 'Forbidden', message: 'Admin authentication required' });
   }
+  const keyCount = Object.keys(process.env).length;
+  const sensitiveKeyCount = Object.keys(process.env).filter((key) => /key|secret|token|password/i.test(key)).length;
   res.json({
-    keys: Object.keys(process.env),
-    geminiKey: process.env.GEMINI_API_KEY,
-    casaKey: process.env['gemini-casa-api'],
-    casaKeyUpper: process.env.GEMINI_CASA_API,
-    aizaKeys
+    nodeEnv: process.env.NODE_ENV,
+    keyCount,
+    sensitiveKeyCount,
+    hasGeminiApiKey: Boolean(process.env.GEMINI_API_KEY?.trim()),
+    hasCasaGeminiApiKey: Boolean(process.env['gemini-casa-api']?.trim() || process.env.GEMINI_CASA_API?.trim())
   });
 });
 
-const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'default-secret-do-not-use-in-prod');
-
 apiRouter.post('/auth/dev-login', async (req, res) => {
+  if (!DEV_LOGIN_ENABLED) {
+    return res.status(404).json({ error: 'Not found' });
+  }
   const { role = 'operator', email = 'dev@casa.local' } = req.body;
   try {
     const token = await new SignJWT({ role, email })
@@ -180,6 +190,12 @@ apiRouter.post('/admin/policy/apply', requireAdminConfirmation, async (req, res)
     const result = await backendBridge.applyPolicy(policyId, reason, req.headers['x-request-id'] as string);
     res.json(result);
   } catch (error: any) {
-    res.status(400).json({ error: 'Invalid request schema', details: error });
+    if (error instanceof ZodError) {
+      return res.status(400).json({ error: 'Invalid request schema', details: error.flatten() });
+    }
+    if (error?.message?.includes('does not yet expose admin policy apply')) {
+      return res.status(501).json({ error: 'Not Implemented', message: error.message });
+    }
+    return res.status(500).json({ error: 'Failed to apply policy', message: error?.message || 'Unknown error' });
   }
 });

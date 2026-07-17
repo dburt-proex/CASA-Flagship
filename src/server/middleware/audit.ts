@@ -5,7 +5,12 @@ import { Logging } from '@google-cloud/logging';
 const logging = new Logging();
 const log = logging.log('casa-audit-log');
 
-const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'default-secret-do-not-use-in-prod');
+const DEFAULT_JWT_SECRET = 'default-secret-do-not-use-in-prod';
+const configuredJwtSecret = process.env.JWT_SECRET?.trim();
+if (process.env.NODE_ENV === 'production' && (!configuredJwtSecret || configuredJwtSecret === DEFAULT_JWT_SECRET)) {
+  throw new Error('JWT_SECRET must be set to a non-default value in production');
+}
+const JWT_SECRET = new TextEncoder().encode(configuredJwtSecret || DEFAULT_JWT_SECRET);
 
 /**
  * Middleware to verify JWT and check for admin role.
