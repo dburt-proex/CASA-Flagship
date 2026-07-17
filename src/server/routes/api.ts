@@ -41,13 +41,9 @@ apiRouter.get('/debug-env', (req, res) => {
   if (process.env.NODE_ENV !== 'development') {
     return res.status(404).json({ error: 'Not found' });
   }
-
-  const aizaKeyCount = Object.values(process.env).filter(value => value?.startsWith('AIza')).length;
   res.json({
     nodeEnv: process.env.NODE_ENV,
-    geminiKeyConfigured: !!process.env.GEMINI_API_KEY?.trim(),
-    casaKeyConfigured: !!(process.env['gemini-casa-api']?.trim() || process.env.GEMINI_CASA_API?.trim()),
-    aizaKeyCount,
+    diagnostics: 'enabled',
   });
 });
 
@@ -56,8 +52,17 @@ apiRouter.post('/auth/dev-login', async (req, res) => {
     return res.status(404).json({ error: 'Not found' });
   }
 
+  const requestedRole = req.body?.role;
+  if (
+    requestedRole !== undefined &&
+    requestedRole !== 'operator' &&
+    requestedRole !== 'admin'
+  ) {
+    return res.status(400).json({ error: 'Invalid role. Must be operator or admin.' });
+  }
+
   const allowDevAdminLogin = process.env.ALLOW_DEV_ADMIN_LOGIN === 'true';
-  const role = allowDevAdminLogin && req.body?.role === 'admin' ? 'admin' : 'operator';
+  const role = allowDevAdminLogin && requestedRole === 'admin' ? 'admin' : 'operator';
   const email = role === 'admin' ? 'dev-admin@casa.local' : 'dev-operator@casa.local';
 
   try {
