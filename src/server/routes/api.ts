@@ -1,4 +1,4 @@
-import { Router, type RequestHandler } from 'express';
+import { Router, type Request, type RequestHandler } from 'express';
 import { SignJWT } from 'jose';
 import { backendBridge } from '../services/backendBridge.js';
 import { geminiService } from '../services/gemini.js';
@@ -36,7 +36,9 @@ apiRouter.use((req, res, next) => {
   next();
 });
 
-const requireDebugRoutesEnabled: RequestHandler = (_req, res, next) => {
+type AuthenticatedRequest = Request & { user?: { role?: string } };
+
+const ensureDebugRoutesEnabled: RequestHandler = (_req, res, next) => {
   if (!DEBUG_ROUTES_ENABLED) return res.status(404).json({ error: 'Not found' });
   next();
 };
@@ -45,8 +47,8 @@ apiRouter.get("/ops/metrics", (req, res) => {
   res.json(opsMetrics.getMetrics());
 });
 
-apiRouter.get('/debug-env', requireDebugRoutesEnabled, authenticate, (req, res) => {
-  const user = (req as any).user;
+apiRouter.get('/debug-env', ensureDebugRoutesEnabled, authenticate, (req, res) => {
+  const user = (req as AuthenticatedRequest).user;
   if (user?.role !== 'admin') {
     return res.status(403).json({ error: 'Forbidden', message: 'Admin authentication required' });
   }
