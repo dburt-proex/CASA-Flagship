@@ -1,7 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { jwtVerify } from 'jose';
-
-const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'default-secret-do-not-use-in-prod');
+import { JWT_SECRET } from '../config/auth.js';
 
 export async function authenticate(req: Request, res: Response, next: NextFunction) {
   const authHeader = req.headers.authorization;

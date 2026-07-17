@@ -11,6 +11,7 @@ import {
 } from '../schemas/contracts.js';
 import { opsMetrics } from '../services/opsMetrics.js';
 import rateLimit from 'express-rate-limit';
+import { JWT_SECRET } from '../config/auth.js';
 
 export const apiRouter = Router();
 
@@ -37,25 +38,27 @@ apiRouter.get("/ops/metrics", (req, res) => {
 });
 
 apiRouter.get('/debug-env', (req, res) => {
-  const aizaKeys: Record<string, string> = {};
-  for (const key in process.env) {
-    if (process.env[key]?.startsWith('AIza')) {
-      aizaKeys[key] = process.env[key]!.substring(0, 10) + '...';
-    }
+  if (process.env.NODE_ENV !== 'development') {
+    return res.status(404).json({ error: 'Not found' });
   }
+
+  const aizaKeyCount = Object.values(process.env).filter(value => value?.startsWith('AIza')).length;
   res.json({
-    keys: Object.keys(process.env),
-    geminiKey: process.env.GEMINI_API_KEY,
-    casaKey: process.env['gemini-casa-api'],
-    casaKeyUpper: process.env.GEMINI_CASA_API,
-    aizaKeys
+    nodeEnv: process.env.NODE_ENV,
+    geminiKeyConfigured: !!process.env.GEMINI_API_KEY?.trim(),
+    casaKeyConfigured: !!(process.env['gemini-casa-api']?.trim() || process.env.GEMINI_CASA_API?.trim()),
+    aizaKeyCount,
   });
 });
 
-const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'default-secret-do-not-use-in-prod');
-
 apiRouter.post('/auth/dev-login', async (req, res) => {
-  const { role = 'operator', email = 'dev@casa.local' } = req.body;
+  if (process.env.NODE_ENV !== 'development') {
+    return res.status(404).json({ error: 'Not found' });
+  }
+
+  const role = req.body?.role === 'admin' ? 'admin' : 'operator';
+  const email = role === 'admin' ? 'dev-admin@casa.local' : 'dev-operator@casa.local';
+
   try {
     const token = await new SignJWT({ role, email })
       .setProtectedHeader({ alg: 'HS256' })

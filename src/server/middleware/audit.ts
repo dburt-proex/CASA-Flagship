@@ -1,11 +1,10 @@
 import { Request, Response, NextFunction } from 'express';
 import { jwtVerify } from 'jose';
 import { Logging } from '@google-cloud/logging';
+import { JWT_SECRET } from '../config/auth.js';
 
 const logging = new Logging();
 const log = logging.log('casa-audit-log');
-
-const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'default-secret-do-not-use-in-prod');
 
 /**
  * Middleware to verify JWT and check for admin role.
