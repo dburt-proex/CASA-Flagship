@@ -1,4 +1,8 @@
-# CASA-Flagship
+# legacy-archived-casa
+
+Casa-flagship has been renamed and archived to avoid model confusion in production
+the source of truth has shifted to "casa" the mono-repo
+
 
 CASA-Flagship is the operator-facing console for CASA.
 
